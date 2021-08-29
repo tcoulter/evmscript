@@ -1,0 +1,21 @@
+{
+  "name": "evmscript",
+  "version": "0.0.1",
+  "description": "Write EVM assembly using Javascript",
+  "main": "index.js",
+  "scripts": {
+    "test": "ts-mocha -p ./tsconfig.json ./test/**/*.spec.ts"
+  },
+  "author": "Tim Coulter <tim@timothyjcoulter.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@types/yargs": "^17.0.2",
+    "yargs": "^17.1.1"
+  },
+  "devDependencies": {
+    "@types/expect": "^24.3.0",
+    "@types/mocha": "^9.0.0",
+    "ts-mocha": "^8.0.0",
+    "ts-node": "^10.2.1"
+  }
+}
