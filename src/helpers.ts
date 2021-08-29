@@ -8,8 +8,8 @@ export type UserFacingFunction = (...args: Expression[]) => Expression|ActionPoi
 export const POINTER_BYTE_LENGTH = 2;
 
 export function byteLength(input:IntermediateRepresentation):number {
-  if (input instanceof ActionSource) {
-    return 0;
+  if (input instanceof Hexable) {
+    return input.byteLength();
   }
 
   if (typeof input == "number") {
@@ -20,14 +20,6 @@ export function byteLength(input:IntermediateRepresentation):number {
   if (typeof input == "bigint") { 
     let length = input.toString(16).length;
     return Math.floor(length / 2) + (length % 2);
-  }
-
-  if (input instanceof LabelPointer || input instanceof ActionPointer) {
-    return POINTER_BYTE_LENGTH;
-  }
-
-  if (input instanceof ConcatedHexValue) {
-    return input.byteLength();
   }
 
   throw new Error("Unknown input:" + input);

@@ -3,8 +3,6 @@ import { byteLength, leftPad, POINTER_BYTE_LENGTH, translateToBytecode } from ".
 import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from "./preprocess";
 
 export enum Instruction {
-  NOOP = -1,
-
   STOP = 0x00,
 
   ADD = 0x01,
@@ -169,7 +167,8 @@ export enum ConfigKeys {
 }
 
 export abstract class Hexable {
-  abstract toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string; 
+  abstract toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string;
+  abstract byteLength():number;
 }
 
 export type HexLiteral = BigInt;
@@ -196,9 +195,14 @@ export class LabelPointer extends Hexable {
     
     return actionPointer.toHex(executedCodeContext, jumpDestinations);
   }
+
+  byteLength() {
+    return POINTER_BYTE_LENGTH;
+  }
 }
 export class ActionSource extends Hexable {
   actionIndex = 0;
+  isUsed = false;
 
   constructor(actionIndex:number) {
     super();
@@ -210,7 +214,19 @@ export class ActionSource extends Hexable {
   }
 
   toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string { 
+    if (this.isUsed) {
+      return translateToBytecode(Instruction.JUMPDEST, executedCodeContext, jumpDestinations);
+    }
+
     return "";
+  }
+
+  byteLength() {
+    return this.isUsed ? 1 /*JUMPDEST*/ : 0; 
+  }
+
+  setIsUsed() {
+    this.isUsed = true;
   }
 }
 
@@ -228,6 +244,10 @@ export class ActionPointer extends Hexable {
       POINTER_BYTE_LENGTH
     );
   }
+
+  byteLength() {
+    return POINTER_BYTE_LENGTH;
+  }
 }
 
 export class ConcatedHexValue extends Hexable {
@@ -242,20 +262,20 @@ export class ConcatedHexValue extends Hexable {
     }
   }
 
-  byteLength() {
-    let length = 0;
-    this.items.forEach((item) => {
-      length += byteLength(item)
-    });
-    return length;
-  }
-
   toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string {
     let bytecode = this.items
       .map<string>((item) => translateToBytecode(item, executedCodeContext, jumpDestinations))
       .join("");
 
     return bytecode;
+  }
+
+  byteLength() {
+    let length = 0;
+    this.items.forEach((item) => {
+      length += byteLength(item)
+    });
+    return length;
   }
 }
 

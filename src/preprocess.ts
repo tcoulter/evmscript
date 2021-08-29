@@ -90,21 +90,32 @@ export function preprocess(code:string):string {
   //// an intermediate representation.
   vm.runInNewContext(code, codeContext);
 
-  // Note: After execution, node can set values of any type,
-  // so we can't rely on them here. Let's make that explicit.
+  // Note: After execution, node can set values of any type to the context,
+  // so we can't rely on types here. Let's make that explicit.
   let executedCodeContext:ExecutedCodeContext = codeContext;
 
-  // 1. Map the intermediate representation to the byte lengths of each item
+  // Explore the codeContext for any variables of type ActionPointer.
+  // If they exist, it means a jumpable label was set in the code.
+  // Let's updated the associated ActionSource and mark it as used. 
+  // This will ensure a JUMPDEST gets added in its place.
+  Object.keys(executedCodeContext)
+    .filter((key) => executedCodeContext[key] instanceof ActionPointer)
+    .map<ActionPointer>((key) => executedCodeContext[key])
+    .forEach((actionPointer) => actionPointer.actionSource.setIsUsed())
+
+  // 1. Compute the byte lengths of each item in the intermediate representation
   // 2. Sum result to determine the total bytes at each index
   // 3. Create a record of ActionSource indeces -> total bytes, as this represents the jump destination 
   let jumpDestinations:ActionIndexToJumpDest = {};
-  let sum = 0; 
-  runtimeContext.intermediate
+  let byteLengths = runtimeContext.intermediate
     .map((item) => byteLength(item))
+
+  let sum = 0; 
+  byteLengths
     .map((length) => {
       sum += length;
       return sum;
-    }) // Look back one index
+    }) 
     .forEach((totalBytes, index) => {
       let item = runtimeContext.intermediate[index];
 
@@ -112,7 +123,8 @@ export function preprocess(code:string):string {
         return;
       }
 
-      jumpDestinations[item.actionIndex] = BigInt(totalBytes);
+      // Don't include the current byte length as that'll point to the following byte! 
+      jumpDestinations[item.actionIndex] = BigInt(totalBytes - byteLengths[index]);
     })
 
   // Now loop through the intermediate representation translating

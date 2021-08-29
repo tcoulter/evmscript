@@ -34,7 +34,7 @@ describe('Preprocessing', function() {
       let bytecode = preprocess(code);
 
       expect(bytecode).toBe(
-        "0x610000"
+        "0x5b610000"
       )
     })
 
@@ -52,7 +52,7 @@ describe('Preprocessing', function() {
       let bytecode = preprocess(code);
 
       expect(bytecode).toBe(
-        "0x60016001600161000456"
+        "0x600160015b600161000456"
       )
     })
 
@@ -70,7 +70,7 @@ describe('Preprocessing', function() {
       let bytecode = preprocess(code);
 
       expect(bytecode).toBe(
-        "0x61000856600160016002"
+        "0x61000856600160015b6002"
       )
     })
 
@@ -84,7 +84,7 @@ describe('Preprocessing', function() {
       let bytecode = preprocess(code);
 
       expect(bytecode).toBe(
-        "0x600161000056"
+        "0x5b600161000056"
       )
     })
   })
