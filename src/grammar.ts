@@ -256,10 +256,6 @@ export class ConcatedHexValue extends Hexable {
   constructor(...items:HexableValue[]) {
     super();
     this.items = items;
-
-    if (this.byteLength() > 32) {
-      throw new Error("ConcatedHexValue cannot store more than 32 bytes.");
-    }
   }
 
   toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string {
@@ -280,29 +276,23 @@ export class ConcatedHexValue extends Hexable {
 }
 
 // Refer to the HexableValue type for what should be allowed.
-function sanitizeHexable(input:Expression):HexableValue {
-  if (input instanceof ActionPointer || input instanceof LabelPointer || input instanceof ConcatedHexValue || typeof input == "bigint") {
+function _sanitizeHexable(input:Expression):HexableValue {
+  if (input instanceof Hexable || typeof input == "bigint") {
     return input;
-  }
-
-  if (typeof input == "string") {
-    if (input.indexOf("0x") == 0) {
-      return BigInt(input);
-    }
-  }
-
-  if (typeof input == "number") {
+  } 
+  
+  if (typeof input == "number" || (typeof input =="string" && input.indexOf("0x") == 0)) {
     return BigInt(input);
   }
 
   return null;
 }
 
-function sanitizeExpression(input:Expression):Expression {
-  let asValue = sanitizeHexable(input);
+function _sanitizeExpression(input:Expression):Expression {
+  let asHexable = _sanitizeHexable(input);
 
-  if (!!asValue) {
-    return asValue;
+  if (!!asHexable) {
+    return asHexable;
   }
 
   if (typeof input == "string" || typeof input == "boolean") {
@@ -316,9 +306,13 @@ export function sanitize(input:Expression|HexableValue, functionName:string, isV
   let sanitized;
   
   if (isValue) {
-    sanitized = sanitizeHexable(input);
+    sanitized = _sanitizeHexable(input);
+
+    if (byteLength(sanitized) > 32) {
+      throw new Error("Function " + functionName + "() cannot accept values larger than 32 bytes.");
+    }
   } else {
-    sanitized = sanitizeExpression(input);
+    sanitized = _sanitizeExpression(input);
   }
 
   if (sanitized) {

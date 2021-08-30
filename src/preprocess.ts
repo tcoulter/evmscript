@@ -60,6 +60,7 @@ export function preprocess(code:string):string {
   // already defined action functions. 
   Object.keys(Instruction)
     .filter((key) => isNaN(parseInt(key)))  // enums have numeric keys too; filter those out
+    .filter((key) => !actionFunctions[key.toLowerCase()]) // filter out instructions with named actions
     .map<[string, UserFacingFunction]>((key) => {
       let lowercaseKey = key.toLowerCase();
 
@@ -153,7 +154,7 @@ export function preprocess(code:string):string {
     throw new Error("CRITICAL FAILURE: Final value has odd byte offset!")
   }
 
-  return "0x" + output;
+  return "0x" + output.toUpperCase();
 }
 
 export function preprocessFile(inputFile:string) {
