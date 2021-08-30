@@ -175,6 +175,23 @@ describe('Action Functions', function() {
         "0x5B600161000056"
       )
     })
+
+    it("should work normally if a parameter is not passed", () => {
+      let code = `
+        jumpdest()
+        push(0)
+        push(0)
+        jumpi()
+        push(0)
+        jump()
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x5B6000600057600056"
+      )
+    })
   })
 });
 

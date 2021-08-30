@@ -50,14 +50,14 @@ function getmem(context:RuntimeContext) {
 }
 
 function jump(context:RuntimeContext, input:HexableValue) {
-  if (typeof input != undefined) {
+  if (typeof input != "undefined") {
     push(context, input);
   }
   context.intermediate.push(Instruction.JUMP);
 }
 
 function jumpi(context:RuntimeContext, input:HexableValue) {
-  if (typeof input != undefined) {
+  if (typeof input != "undefined") {
     push(context, input);
   }
   context.intermediate.push(Instruction.JUMPI);

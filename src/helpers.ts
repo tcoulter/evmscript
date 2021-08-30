@@ -22,7 +22,7 @@ export function byteLength(input:IntermediateRepresentation):number {
     return Math.floor(length / 2) + (length % 2);
   }
 
-  throw new Error("Unknown input:" + input);
+  throw new Error("Unknown input to byteLength(): " + input);
 }
 
 export function createActionHandler(runtimeContext:RuntimeContext, key:string, fn:ActionFunction):UserFacingFunction {
