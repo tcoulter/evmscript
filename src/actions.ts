@@ -49,9 +49,18 @@ function getmem(context:RuntimeContext) {
   ]);
 }
 
-function goto(context:RuntimeContext, input:HexableValue) {
-  push(context, input);
+function jump(context:RuntimeContext, input:HexableValue) {
+  if (typeof input != undefined) {
+    push(context, input);
+  }
   context.intermediate.push(Instruction.JUMP);
+}
+
+function jumpi(context:RuntimeContext, input:HexableValue) {
+  if (typeof input != undefined) {
+    push(context, input);
+  }
+  context.intermediate.push(Instruction.JUMPI);
 }
 
 function $set(context:RuntimeContext, key:string, value:string) {
@@ -87,7 +96,8 @@ function $concat(context:RuntimeContext, ...args:HexableValue[]) {
 export const actionFunctions:Record<string, ActionFunction> = {
   push,
   getmem,
-  goto
+  jump,
+  jumpi
 }
 
 specificPushFunctions.forEach((fn, index) => {

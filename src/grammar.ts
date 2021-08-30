@@ -318,6 +318,6 @@ export function sanitize(input:Expression|HexableValue, functionName:string, isV
   if (sanitized) {
     return sanitized;
   } else {
-    throw new Error("Function " + functionName + "() cannot accept value of: " + input + ". If you're jumping to a named code location with goto(), using goto($ptr('name')).");
+    throw new Error("Function " + functionName + "() cannot accept value of: " + input + ". If you're jumping to a named code location with jump(), use jump($ptr('name')).");
   } 
 }

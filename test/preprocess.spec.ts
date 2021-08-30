@@ -126,7 +126,7 @@ describe('Action Functions', function() {
       )
     })
 
-    it("should point to the correct location of named pointers when using $ptr() and goto()", () => {
+    it("should point to the correct location of named pointers when using $ptr() and jump()", () => {
       let code = `
         push(0x01)
         push(0x01)
@@ -134,7 +134,7 @@ describe('Action Functions', function() {
         someLabel = 
           push(0x01)
 
-        goto($ptr("someLabel"))
+        jump($ptr("someLabel"))
       `
 
       let bytecode = preprocess(code);
@@ -144,9 +144,9 @@ describe('Action Functions', function() {
       )
     })
 
-    it("should be able to use $ptr() syntax within goto's to jump to a label not yet seen at runtime", () => {
+    it("should be able to use $ptr() syntax within jumps to jump to a label not yet seen at runtime", () => {
       let code = `
-        goto($ptr("main"))
+        jump($ptr("main"))
 
         push(0x01)  // dead code
         push(0x01)  // dead code
@@ -166,7 +166,7 @@ describe('Action Functions', function() {
       let code = `
         mainloop = 
           push(0x01)
-          goto(mainloop)
+          jump(mainloop)
       `
 
       let bytecode = preprocess(code);
