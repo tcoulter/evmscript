@@ -56,13 +56,17 @@ describe('Action Functions', function() {
         push(0x0001n)   // and treated as a single byte
         push("0x0001")
 
+        push(0)         // But it should accept 0's of all types
+        push(0n),
+        push("0x0")
+
         // Note that pointer types are checked in the tests below
       `
 
       let bytecode = preprocess(code);
 
       expect(bytecode).toBe(
-        "0x6001600160016001600160016001"
+        "0x6001600160016001600160016001600060006000"
       )
     })
 
