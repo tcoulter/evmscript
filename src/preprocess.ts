@@ -22,12 +22,14 @@ export type ExecutedCodeContext = Record<string, any>;
 
 export type ActionIndexToJumpDest = Record<number, BigInt>;
 
-export function preprocess(code:string):string {
+export function preprocess(code:string, extraContext:Record<string, any> = {}):string {
 
   let runtimeContext:RuntimeContext = new RuntimeContext();
 
-  // Set some custom context functions
-  let codeContext:CodeContext = {}
+  // Set some custom context functions, taking in what's passed by the user
+  let codeContext:CodeContext = {
+    ...extraContext 
+  }
 
   let nonActionFunctions:Record<string, ExpressionFunction|ContextFunction> = {
     ...expressionFunctions,
@@ -157,9 +159,9 @@ export function preprocess(code:string):string {
   return "0x" + output.toUpperCase();
 }
 
-export function preprocessFile(inputFile:string) {
+export function preprocessFile(inputFile:string, extraContext:Record<string, any> = {}) {
   let input:string = fs.readFileSync(inputFile, "utf-8");
-  return preprocess(input);
+  return preprocess(input, extraContext);
 }
 
 

@@ -24,6 +24,20 @@ describe('General Processing', () => {
       preprocess(code);
     }).toThrow();
   })
+
+  it("allows the user to specify extra context variables", () => {
+    let code = `
+      push(SOME_CONSTANT)
+    `
+
+    let bytecode = preprocess(code, {
+      SOME_CONSTANT: 5
+    });
+
+    expect(bytecode).toBe(
+      "0x6005"
+    )
+  })
 })
 
 describe('Action Functions', function() {
