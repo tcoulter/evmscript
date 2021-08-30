@@ -1,11 +1,9 @@
 // See https://ethervm.io/ for opcode reference
 import { 
   Instruction, 
-  IntermediateRepresentation, 
   LabelPointer, 
   HexableValue,
   Expression,
-  ActionPointer,
   ConcatedHexValue
 } from "./grammar";
 import { byteLength } from "./helpers";
@@ -63,6 +61,10 @@ function jumpi(context:RuntimeContext, input:HexableValue) {
   context.intermediate.push(Instruction.JUMPI);
 }
 
+function insert(context:RuntimeContext, ...args:HexableValue[]) {
+  Array.prototype.push.apply(context.intermediate, args);
+}
+
 function $set(context:RuntimeContext, key:string, value:string) {
   // TODO: key and value check; don't let users set wrong stuff/set incorrectly
   context[key.toString().trim()] = value;
@@ -74,6 +76,10 @@ function $ptr(context:RuntimeContext, labelName:string) {
 
 function $concat(context:RuntimeContext, ...args:HexableValue[]) {
   return new ConcatedHexValue(...args);
+}
+
+function $bytelen(context:RuntimeContext, input:HexableValue) {
+  return byteLength(input);
 }
 
 // Ideas: 
@@ -96,6 +102,7 @@ function $concat(context:RuntimeContext, ...args:HexableValue[]) {
 export const actionFunctions:Record<string, ActionFunction> = {
   push,
   getmem,
+  insert,
   jump,
   jumpi
 }
@@ -106,6 +113,7 @@ specificPushFunctions.forEach((fn, index) => {
 
 export const expressionFunctions:Record<string, ExpressionFunction> = {
   $concat,
+  $bytelen,
   $ptr
 }
 

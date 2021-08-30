@@ -250,4 +250,56 @@ describe("Expression Functions", () => {
     })
   })
 
+  describe("$set", () => {
+    it("should create deployable bytecode when $set('deployable', true) is used", () => {
+      let code = `
+        $set("deployable", true)
+        push(0xAAAA) // just something dinstinctive
+      `
+
+      let expectedRuntimeBytecode = "61AAAA"; // Without 0x-prefix
+      let deployedBytecode = preprocess(code);
+
+      // Note that our deployer code inserts an unused JUMPDEST (5B)
+      // TODO: Determine which pointers are used in jumps and which are not;
+      // remove JUMPDEST if not used in jumps.
+
+      expect(deployedBytecode).toBe(
+        "0x60036040518161000C8239F35B" + expectedRuntimeBytecode
+      )
+    })
+  })
+
+})
+
+describe("README example", () => {
+  it("shouldn't error", () => {
+    let code = `
+      $set("deployable", true)
+
+      const TIMES = 5;
+
+      push(0)
+
+      mainloop = 
+        // ... do something here, TIMES times ...
+        // Now check counter
+      
+        push(1) // Add 1 to the index
+        add()
+        dup1()  // save a copy for the next operation
+        push(TIMES)
+        gt()    // TIMES > index ? push(1); push(0)
+        jumpi(mainloop)
+      
+      stop()
+    `
+
+    let bytecode = preprocess(code);
+
+    expect(bytecode).toBe(
+      "0x600F6040518161000C8239F35B60005B600101806005116100025700"
+      // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ deployment preamble
+    )
+  })
 })

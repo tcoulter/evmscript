@@ -1,10 +1,9 @@
-import vm from 'vm'
-import { ActionFunction, ExpressionFunction, actionFunctions, expressionFunctions, contextFunctions, ContextFunction } from "./actions";
-import { Instruction, Expression,IntermediateRepresentation, sanitize, ActionPointer, ActionSource, LabelPointer, ConcatedHexValue } from "./grammar";
+import vm from 'vm';
 import fs from "fs";
-import os from "os";
+import path from "path";
+import { ExpressionFunction, actionFunctions, expressionFunctions, contextFunctions, ContextFunction } from "./actions";
+import { Instruction,IntermediateRepresentation, ActionPointer, ActionSource } from "./grammar";
 import { byteLength, createActionHandler, createExpressionAndContextHandlers, translateToBytecode, UserFacingFunction } from './helpers';
-
 
 export class RuntimeContext {
   deployable: boolean = false;
@@ -156,18 +155,20 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
     throw new Error("CRITICAL FAILURE: Final value has odd byte offset!")
   }
 
-  return "0x" + output.toUpperCase();
+  output = "0x" + output.toUpperCase();
+
+  // If the code is set to deployable, use our own preprocessor to create
+  // a deployer for that code.
+  if (runtimeContext.deployable == true) {
+    output = preprocessFile(path.join(__dirname, "./deployer.bytecode"), {
+      CODE: output
+    })
+  }
+
+  return output;
 }
 
 export function preprocessFile(inputFile:string, extraContext:Record<string, any> = {}) {
   let input:string = fs.readFileSync(inputFile, "utf-8");
   return preprocess(input, extraContext);
 }
-
-
-// console.log(JSON.stringify(final, (key, value) =>
-//   typeof value === "bigint" ? `0x${value.toString(16)}` : value, 2));
-
-
-
-// console.log(JSON.stringify(config, null, 2));
