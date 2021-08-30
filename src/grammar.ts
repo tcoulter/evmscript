@@ -303,6 +303,10 @@ function _sanitizeExpression(input:Expression):Expression {
 }
 
 export function sanitize(input:Expression|HexableValue, functionName:string, isValue=false):Expression {
+  if (typeof input == "undefined") {
+    return undefined;
+  }
+
   let sanitized;
   
   if (isValue) {
