@@ -1,15 +1,23 @@
 // We're using our own preprocessor to create the deployer! 
-// Bytecode to be deployed will be set in CODE variable
+// Bytecode to be deployed will be set in the CODE variable
 
-push($bytelen(CODE))    // Push the byte length of the code, for use later
-getmem()                // Push free memory pointer as the destination offset, also for later
+callvalue()               // Don't allow the constructor to be payable
+iszero()                  // If the call value is 0, jump past the revert
+jumpi($ptr("deploy"))     // 
+push(0)                   // Otherwise, push the smallest amount of data needed
+dup1()                    // to revert and skiddadle! 
+revert()                  // 
 
-dup2()                  // Push the length of the code
-push($ptr("codeptr"))   // Push the offset of the code using codeptr
-dup3()                  // Copy the free memory pointer as the mem offset            
-codecopy()              // Copy code into memory
+deploy = 
+  push($bytelen(CODE))    // Push the byte length of the code, for use later
+  getmem()                // Push free memory pointer as the destination offset, also for later
 
-ret()                   // Now return (the offset and length set at the beginning are on the top of the stack)
+  dup2()                  // Push the length of the code
+  push($ptr("codeptr"))   // Push the offset of the code using codeptr
+  dup3()                  // Copy the free memory pointer as the mem offset            
+  codecopy()              // Copy code into memory
 
-codeptr = 
-  insert(CODE)          // Directly copy CODE into the bytecode
+  ret()                   // Now, return (the offset and length set at the beginning are on the top of the stack)
+
+codeptr =               
+  insert(CODE)            // Directly copy CODE into the bytecode

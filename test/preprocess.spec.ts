@@ -265,7 +265,7 @@ describe("Expression Functions", () => {
       // remove JUMPDEST if not used in jumps.
 
       expect(deployedBytecode).toBe(
-        "0x60036040518161000C8239F35B" + expectedRuntimeBytecode
+        "0x341561000A57600080FD5B6003604051816100178239F35B" + expectedRuntimeBytecode
       )
     })
   })
@@ -298,8 +298,8 @@ describe("README example", () => {
     let bytecode = preprocess(code);
 
     expect(bytecode).toBe(
-      "0x600F6040518161000C8239F35B60005B600101806005116100025700"
-      // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ deployment preamble
+      "0x341561000A57600080FD5B600F604051816100178239F35B60005B600101806005116100025700"
+      // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ deployment preamble
     )
   })
 })
