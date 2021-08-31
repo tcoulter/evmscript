@@ -1,5 +1,5 @@
 import expect from "expect";
-import { preprocess } from "../src/preprocess";
+import { preprocess } from "../src";
 
 
 describe('General Processing', () => {

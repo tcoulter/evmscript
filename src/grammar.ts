@@ -1,6 +1,6 @@
 import { number, string } from "yargs";
 import { byteLength, leftPad, POINTER_BYTE_LENGTH, translateToBytecode } from "./helpers";
-import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from "./preprocess";
+import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from ".";
 
 export enum Instruction {
   STOP = 0x00,

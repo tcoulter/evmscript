@@ -7,7 +7,7 @@ import {
   ConcatedHexValue
 } from "./grammar";
 import { byteLength } from "./helpers";
-import { RuntimeContext } from "./preprocess";
+import { RuntimeContext } from ".";
 
 export type ActionFunction = (context:RuntimeContext, ...args: HexableValue[]) => void;
 export type ExpressionFunction = (context:RuntimeContext, ...args: Expression[]) => HexableValue;

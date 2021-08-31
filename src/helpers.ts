@@ -1,6 +1,6 @@
 import { ActionFunction, ContextFunction, ExpressionFunction } from "./actions";
 import {ActionPointer, ActionSource, ConcatedHexValue, Expression, Hexable, HexableValue, IntermediateRepresentation, LabelPointer, sanitize} from "./grammar";
-import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from "./preprocess";
+import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from ".";
 
 export type UserFacingFunction = (...args: Expression[]) => Expression|ActionPointer;
 
