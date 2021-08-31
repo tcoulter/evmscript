@@ -2,12 +2,13 @@
   "name": "evmscript",
   "version": "0.0.1",
   "description": "Write EVM assembly using Javascript!",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "bin": {
     "evmscript": "dist/cli.js"
   },
   "scripts": {
+    "prepublish": "npx tsc",
     "test": "ts-mocha -p ./tsconfig.json ./test/**/*.spec.ts"
   },
   "author": "Tim Coulter <tim@timothyjcoulter.com>",
