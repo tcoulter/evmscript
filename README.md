@@ -66,7 +66,7 @@ jump()            // And 4. Viola! Jump to the desired location.
 
 Here we jump to the first index found in the call data, but theoretically we could stick this in a loop and process many lookups/jumps.
 
-Of course I didn't intend to create my own EVM scripting mechanism, but Yul didn't work for me (described below), and there was no way I was going to write straight assembly. Ain't nobody got time for that, especially in a project where needs can change rapidly.
+Of course I didn't intend to create my own EVM scripting mechanism, but [Yul](https://docs.soliditylang.org/en/v0.7.4/yul.html), the most used EVM assembly language baked directly into Solidity, didn't work for me (described below), and there was no way I was going to write straight assembly. Ain't nobody got time for that, especially in a project where needs can change rapidly.
 
 Yul didn't work specifically because of [this quote](https://docs.soliditylang.org/en/v0.7.4/yul.html#motivation-and-high-level-description) (emphasis mine): 
 
@@ -92,7 +92,7 @@ It's just Javascript! We use the features provided by Node's [`vm` module](https
 
 ## Examples
 
-TODO. For now, see [./tests](tests).
+TODO. For now, see [./test](the tests).
 
 ###
 
