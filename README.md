@@ -92,7 +92,7 @@ It's just Javascript! We use the features provided by Node's [`vm` module](https
 
 ## Examples
 
-TODO. For now, see [./test](the tests).
+TODO. For now, see [the tests](./test).
 
 ###
 
