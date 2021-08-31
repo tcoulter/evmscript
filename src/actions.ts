@@ -4,7 +4,8 @@ import {
   LabelPointer, 
   HexableValue,
   Expression,
-  ConcatedHexValue
+  ConcatedHexValue,
+  JumpMap
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from ".";
@@ -78,6 +79,10 @@ function $concat(context:RuntimeContext, ...args:HexableValue[]) {
   return new ConcatedHexValue(...args);
 }
 
+function $jumpmap(context:RuntimeContext, ...args:string[]) {
+  return new JumpMap(...args);
+}
+
 function $bytelen(context:RuntimeContext, input:HexableValue) {
   return byteLength(input);
 }
@@ -112,8 +117,9 @@ specificPushFunctions.forEach((fn, index) => {
 })
 
 export const expressionFunctions:Record<string, ExpressionFunction> = {
-  $concat,
   $bytelen,
+  $concat,
+  $jumpmap,
   $ptr
 }
 

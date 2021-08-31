@@ -65,8 +65,16 @@ export function translateToBytecode(item:IntermediateRepresentation, executedCod
 }
 
 export function leftPad(bytecode:string, byteLength:number) {
-  while (bytecode.length < byteLength * 2) {
+  while (bytecode.length % (byteLength * 2) != 0) {
     bytecode = "0" + bytecode;
+  }
+
+  return bytecode;
+}
+
+export function rightPad(bytecode:string, byteLength:number) {
+  while (bytecode.length % (byteLength * 2) != 0) {
+    bytecode = bytecode + "0";
   }
 
   return bytecode;

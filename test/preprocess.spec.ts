@@ -215,7 +215,7 @@ describe('Action Functions', function() {
 
 describe("Expression Functions", () => {
 
-  describe("$concat", () => {
+  describe("$concat()", () => {
     it("should concatenate two values, maintaining byte sizes", () => {
       let code = `
         push($concat(1,1))
@@ -250,7 +250,7 @@ describe("Expression Functions", () => {
     })
   })
 
-  describe("$set", () => {
+  describe("$set()", () => {
     it("should create deployable bytecode when $set('deployable', true) is used", () => {
       let code = `
         $set("deployable", true)
@@ -266,6 +266,35 @@ describe("Expression Functions", () => {
 
       expect(deployedBytecode).toBe(
         "0x341561000A57600080FD5B6003604051816100178239F35B" + expectedRuntimeBytecode
+      )
+    })
+  })
+
+  describe("$jumpmap()", () => {
+    it("should create a map of jump dest values, padded right to 32 bytes", () => {
+      let code = `
+        push(
+          $jumpmap(
+            "one", 
+            "two", 
+            "three"
+          )
+        )
+
+        one = 
+          push(1)
+
+        two = 
+          push(2)
+
+        three = 
+          push(3)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x7F00210024002700000000000000000000000000000000000000000000000000005B60015B60025B6003"
       )
     })
   })

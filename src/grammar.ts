@@ -1,5 +1,5 @@
 import { number, string } from "yargs";
-import { byteLength, leftPad, POINTER_BYTE_LENGTH, translateToBytecode } from "./helpers";
+import { byteLength, leftPad, POINTER_BYTE_LENGTH, rightPad, translateToBytecode } from "./helpers";
 import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from ".";
 
 export enum Instruction {
@@ -172,8 +172,8 @@ export abstract class Hexable {
 }
 
 export type HexLiteral = BigInt;
-export type HexableValue = ActionPointer|LabelPointer|HexLiteral|ConcatedHexValue|Instruction;
-export type Expression = HexableValue|ConfigKeys|number|boolean|string; // These strings are interpreted by JS
+export type HexableValue = Hexable|HexLiteral|Instruction;
+export type Expression = HexableValue|ConfigKeys|number|boolean|string; 
 
 export type IntermediateRepresentation = ActionSource|HexableValue;
 
@@ -272,6 +272,27 @@ export class ConcatedHexValue extends Hexable {
       length += byteLength(item)
     });
     return length;
+  }
+}
+
+export class JumpMap extends Hexable {
+  items:ConcatedHexValue;
+
+  constructor(...items:string[]) {
+    super();
+    this.items = new ConcatedHexValue(...items.map((str) => new LabelPointer(str)));
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string {
+    return rightPad(
+      this.items.toHex(executedCodeContext, jumpDestinations),
+      32
+    )
+  }
+
+  byteLength() {
+    let length = this.items.byteLength();
+    return length + (32 - (length % 32));
   }
 }
 
