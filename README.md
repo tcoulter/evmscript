@@ -76,7 +76,7 @@ I disagree with the author on that last point, because (somewhat pedantically) c
 
 ## Features
 
-When looking for an alternative beyond Yul, what I quickly realized was that writing straight assembly with the addition of helpful preprocessing functions can make the task a lot easier. I originally set out to solve my needs for a jump map, and after piggy-backing on Javascript's interpreter for translation, the features just kept coming:
+When looking for an alternative beyond Yul, what I quickly realized was that writing straight assembly with the addition of helpful preprocessing functions can make the task a lot easier. I originally set out to solve my needs for a jump map, and after piggy-backing on Javascript's interpreter for translation, the features just kept coming. `evmscript` gives you:
 
 * A generalized `push()` function, which choosed the correct `PUSH*` instruction based on input
 * Named jump destinations, and `jump()` and `jumpi()` functions that will calculate the correct jump destination based on the name passed in.
