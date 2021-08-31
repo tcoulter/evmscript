@@ -4,7 +4,7 @@ Write assembly language applications for the EVM (and EVM-enabled blockchains) u
 
 ## What is it? 
 
-EVMScript is a method of writing "bare-metal" assembly applications for the Ethereum Virtual Machine (EVM) using Javascript. EVMScript takes advantage of the Javascript interpreter so that you can write commented, multi-line assembly without a hex editor, with all the preprocessing and helper functions you could ever ask for. 
+`evmscript` is a method of writing "bare-metal" assembly applications for the Ethereum Virtual Machine (EVM) using Javascript. `evmscript` takes advantage of the Javascript interpreter so that you can write commented, multi-line assembly without a hex editor, with all the preprocessing and helper functions you could ever ask for. 
 
 ### Example
 
