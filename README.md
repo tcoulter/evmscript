@@ -27,5 +27,55 @@ mainloop =
   jumpi(mainloop)
 
 stop()
+```
+
+
+## FAQ
+
+### Why did you create `evmscript`? Doesn't YUL work? 
+
+**TL;DR:** I wanted a jump map, which jumps to a specific spot based on call data. Here's an example jump map in `evmscript`: 
+
+```javascript
+getmem()                            // get free memory pointer, to use as jump map offset
+push32(                             // push jump map
+  $rightpad(
+    $concat(
+      $ptr("destination_one"),      // byte 0 of value, from left
+      $ptr("destination_two"),      // byte 2 of value, from left
+      $ptr("destination_three"),    // byte 4 of value, from left
+      // ...
+    ),
+    32
+  )
+)
+dup2()                              // copy jump map offset
+mstore()                            // store jump map at offset
+
+push(4)                             // load first call data slot past solidity 4-byte hash
+calldataload()    
+dup2()                              // copy jump map offset (again) and add to jump map offset
+add()                               // to calculate the index offset 
+
+mload()                             // load jump ptr (and 30 other bytes) at index offset
+push(30)                            // get rid of the 30 other bytes
+shr()                               
+jump()                              // jump to destination within the jump map at the index! 
+
+
+destination_one = 
+  // ...
+destination_two = 
+  // ...
+destination_three = 
+  // ...
+
+// ... more jump destinations ...
 
 ```
+
+
+
+## Resources
+
+* ethervm: EVM assembly reference and decompiler. https://ethervm.io/
