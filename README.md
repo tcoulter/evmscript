@@ -13,7 +13,7 @@ $set("deployable", true)
 
 const TIMES = 5;
 
-push(0)
+push(0) // start index at 0
 
 mainloop = 
   // ... do something here, TIMES times ...
@@ -48,18 +48,19 @@ It all started because I wanted a "jump map" (at least, that's what I'm calling 
 // Notice every jump destination is two bytes.
 // With that in memory, you could then do the following:
 
-push(4)           // load first call data slot past solidity 4-byte hash
-calldataload()    // this will load the index passed in
-push(0x2)         // it's 2 bytes per index, so take that into account
+push(4)           // 1. Load first call data slot past solidity 4-byte hash.
+calldataload()    // This will load the index passed in. It's 2 bytes per
+push(0x2)         // index, so take that into account.
 mul()             //
 
-push(0x80)        // calculate the offset for the index based on start of the map
+push(0x80)        // 2. Calculate the offset for the index based on start of the map.
 add()
 
-mload()           // load 32 bytes from the index offset onto the stack
-push(30)          // get rid of the 30 we don't need
+mload()           // 3. Load 32 bytes from the index offset onto the stack
+push(30)          // and get rid of the 30 we don't need.
 shr()             //
-jump()            // and viola! jump to the desired location
+
+jump()            // And 4. Viola! Jump to the desired location.
 
 ```
 
