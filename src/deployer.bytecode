@@ -13,11 +13,12 @@ deploy =
   getmem()                // Push free memory pointer as the destination offset, also for later
 
   dup2()                  // Push the length of the code
-  push($ptr("codeptr"))   // Push the offset of the code using codeptr
+  push($ptr("_codeptr"))  // Push the offset of the code using codeptr           
+
   dup3()                  // Copy the free memory pointer as the mem offset            
   codecopy()              // Copy code into memory
 
   ret()                   // Now, return (the offset and length set at the beginning are on the top of the stack)
 
-codeptr =               
+_codeptr =               
   insert(CODE)            // Directly copy CODE into the bytecode

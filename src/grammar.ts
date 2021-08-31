@@ -202,7 +202,7 @@ export class LabelPointer extends Hexable {
 }
 export class ActionSource extends Hexable {
   actionIndex = 0;
-  isUsed = false;
+  isJumpDestination = false;
 
   constructor(actionIndex:number) {
     super();
@@ -214,7 +214,7 @@ export class ActionSource extends Hexable {
   }
 
   toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string { 
-    if (this.isUsed) {
+    if (this.isJumpDestination) {
       return translateToBytecode(Instruction.JUMPDEST, executedCodeContext, jumpDestinations);
     }
 
@@ -222,11 +222,11 @@ export class ActionSource extends Hexable {
   }
 
   byteLength() {
-    return this.isUsed ? 1 /*JUMPDEST*/ : 0; 
+    return this.isJumpDestination ? 1 /*JUMPDEST*/ : 0; 
   }
 
-  setIsUsed() {
-    this.isUsed = true;
+  setIsJumpDestination() {
+    this.isJumpDestination = true;
   }
 }
 

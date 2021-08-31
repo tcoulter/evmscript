@@ -97,13 +97,14 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
   let executedCodeContext:ExecutedCodeContext = codeContext;
 
   // Explore the codeContext for any variables of type ActionPointer.
-  // If they exist, it means a jumpable label was set in the code.
-  // Let's updated the associated ActionSource and mark it as used. 
-  // This will ensure a JUMPDEST gets added in its place.
+  // If they exist, it means a (potentially) jumpable label was used in the code.
+  // If the name doesn't start with an _, then we'll assume it's a jump
+  // destination, and we'll mark it as such. 
   Object.keys(executedCodeContext)
     .filter((key) => executedCodeContext[key] instanceof ActionPointer)
+    .filter((key) => key.indexOf("_") != 0)
     .map<ActionPointer>((key) => executedCodeContext[key])
-    .forEach((actionPointer) => actionPointer.actionSource.setIsUsed())
+    .forEach((actionPointer) => actionPointer.actionSource.setIsJumpDestination())
 
   // 1. Compute the byte lengths of each item in the intermediate representation
   // 2. Sum result to determine the total bytes at each index

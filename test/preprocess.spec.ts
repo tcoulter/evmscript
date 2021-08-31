@@ -1,3 +1,4 @@
+import { defineReadOnly } from "ethers/lib/utils";
 import expect from "expect";
 import { preprocess } from "../src";
 
@@ -211,6 +212,20 @@ describe('Action Functions', function() {
       )
     })
   })
+
+  describe("getmem()", () => {
+    it("should push the right opcodes", () => {
+      let code = `
+        getmem()
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x604051"
+      )
+    })
+  })
 });
 
 describe("Expression Functions", () => {
@@ -265,7 +280,7 @@ describe("Expression Functions", () => {
       // remove JUMPDEST if not used in jumps.
 
       expect(deployedBytecode).toBe(
-        "0x341561000A57600080FD5B6003604051816100178239F35B" + expectedRuntimeBytecode
+        "0x341561000A57600080FD5B6003604051816100178239F3" + expectedRuntimeBytecode
       )
     })
   })
@@ -327,8 +342,8 @@ describe("README example", () => {
     let bytecode = preprocess(code);
 
     expect(bytecode).toBe(
-      "0x341561000A57600080FD5B600F604051816100178239F35B60005B600101806005116100025700"
-      // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ deployment preamble
+      "0x341561000A57600080FD5B600F604051816100178239F360005B600101806005116100025700"
+      // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ deployment preamble
     )
   })
 })
