@@ -90,6 +90,61 @@ When looking for an alternative beyond Yul, what I quickly realized was that wri
 
 It's just Javascript! We use the features provided by Node's [`vm` module](https://nodejs.org/api/vm.html) -- effectively a dressed up `eval()` -- bootstrap your code with functions you need. These functions, like `push()`, build your program's bytecode as they're executed, and give you the ability to do as much preprocessing as you need.
 
+## Usage
+
+First install it:
+
+```
+$ npm install evmscript
+```
+
+Then, in your code:
+
+```javascript
+import {preprocess, preprocessFile} from "evmscript";
+
+// Preprocess a file
+let bytecode = preprocessFile("./path/to/file.bytecode", {
+  // ... constants/functions to inject in your code
+});
+
+// Or, preprocess code directly
+let bytecode = preprocess(code, {
+  // ... constants/functions to inject in your code
+})
+
+// Then use that bytecode in a transaction. This example uses  
+// the `ethers` package. We also assume your bytecode is set 
+// to deployable.
+
+// Do the processing
+let bytecode = preprocess(code);
+
+// Set up ethers
+let provider = new ethers.providers.JsonRpcProvider();
+let signer = provider.getSigner();
+
+// Deploy the bytecode
+let tx = await signer.sendTransaction({
+  data: bytecode
+})
+
+// Get a receipt so we can record the deployed contract address
+let receipt = await provider.getTransactionReceipt(tx.hash);
+
+// Now let's call our code using ethers.
+// Here we make up an ABI that will create the call data our bytecode expects.
+// We generally recommend you follow Solidity conventions with
+// calldata since almost all contracts are written in Solidity.
+let contract = new ethers.Contract(receipt.contractAddress, [
+  "function myFunc() public pure returns(uint)"
+], signer);
+
+let value:ethers.BigNumber = await contract.myFunc();  
+// Then do something with the value! 
+
+```
+
 ## Examples
 
 TODO. For now, see [the tests](./test).
