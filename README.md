@@ -94,7 +94,24 @@ It's just Javascript! We use the features provided by Node's [`vm` module](https
 
 TODO. For now, see [the tests](./test).
 
-###
+### Development
+
+Set up:
+
+```
+$ git clone git@github.com:tcoulter/evmscript.git
+$ cd evmscript
+$ npm install
+```
+
+Run tests: 
+
+```
+$ npm test
+```
+
+All code is written in Typescript, including the tests, save for [our own contract deployer](./src/deployer.bytecode) that's written directly in `evmscript`!
+
 
 ## Resources
 
