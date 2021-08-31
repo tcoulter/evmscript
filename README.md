@@ -137,7 +137,7 @@ let receipt = await provider.getTransactionReceipt(tx.hash);
 // We generally recommend you follow Solidity conventions with
 // calldata since almost all contracts are written in Solidity.
 let contract = new ethers.Contract(receipt.contractAddress, [
-  "function myFunc() public pure returns(uint)"
+  "function myFunc() public pure returns(uint)" // Note: This is dependent on your code
 ], signer);
 
 let value:ethers.BigNumber = await contract.myFunc();  
