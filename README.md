@@ -88,7 +88,7 @@ When looking for an alternative beyond Yul, what I quickly realized was that wri
 
 ## How does it work?
 
-It's just Javascript! We use the features provided by Node's [`vm` module](https://nodejs.org/api/vm.html) -- effectively a dressed up `eval()` -- bootstrap your code with functions you need. These functions, like `push()`, build your program's bytecode as they're executed, and give you the ability to do as much preprocessing as you need.
+It's just Javascript! We use the features provided by Node's [`vm` module](https://nodejs.org/api/vm.html) -- effectively a dressed up `eval()` -- to bootstrap your code with functions you need. These functions, like `push()`, build your program's bytecode as they're executed, and give you the ability to do as much preprocessing as you need.
 
 ## Usage
 
