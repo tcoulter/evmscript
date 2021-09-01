@@ -79,7 +79,7 @@ I disagree with the author on that last point, because (somewhat pedantically) c
 When looking for an alternative beyond Yul, what I quickly realized was that writing straight assembly with the addition of helpful preprocessing functions can make the task a lot easier. I originally set out to solve my needs for a jump map, and after piggy-backing on Javascript's interpreter for translation, the features just kept coming. `evmscript` gives you:
 
 * A generalized `push()` function, which choosed the correct `PUSH*` instruction based on input
-* Named jump destinations, and `jump()` and `jumpi()` functions that will calculate the correct jump destination based on the name passed in.
+* Named jump destinations, and `jump()` and `jumpi()` functions that will calculate the correct jump destination based on the name passed in. As well, named code locations that can be pointed to and resolved during preprocessing (see our own [deployer](./src/deployer.bytecode)).
 * Helpful common routines like `getmem()`, which pushes `0x40` and calls `MLOAD` to read the free memory pointer.
 * Preprocessing-specific functions that can help you craft the right data, such as `$concat()` which concatenates hex values; `$bytelen()` which calculates the byte length of arbitrary input; and `$ptr()` which will give you the bytecode-location of any named code location. 
 * Helpers like `$set("deployable", true)`, which add the necessary bytecode to ensure your code creates a deployable contract. 
