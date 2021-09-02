@@ -324,12 +324,14 @@ export class WordRange extends ByteRange {
 
 export class Padded extends Hexable {
   item:HexableValue;
+  itemLength:number;
   lengthInBytes:number;
   side:("left"|"right");
 
   constructor(item:HexableValue, lengthInBytes: number, side:("left"|"right") = "left") {
     super();
     this.item = item;
+    this.itemLength = byteLength(item);
     this.lengthInBytes = lengthInBytes;
     this.side = side;
   }
@@ -345,7 +347,7 @@ export class Padded extends Hexable {
   }
 
   byteLength() {
-    return this.lengthInBytes;
+    return this.itemLength + (this.lengthInBytes - (this.itemLength % this.lengthInBytes));
   }
 }
 
@@ -404,21 +406,28 @@ function _sanitizeHexable(input:Expression):HexableValue {
     return BigInt(input);
   }
 
-  return null;
+  return;
 }
 
 function _sanitizeExpression(input:Expression):Expression {
   let asHexable = _sanitizeHexable(input);
 
-  if (!!asHexable) {
-    return asHexable;
+  if (typeof input == "string") {
+    if (input.indexOf("0x") == 0) {
+      return BigInt(input);
+    } else {
+      return input;
+    }
   }
 
-  if (typeof input == "string" || typeof input == "boolean") {
+  if (input instanceof Hexable 
+    || typeof input == "number"
+    || typeof input == "bigint" 
+    || typeof input == "boolean") {
     return input;
   }
 
-  return null;
+  return;
 }
 
 export function sanitize(input:Expression|HexableValue, functionName:string, isValue=false):Expression {

@@ -192,6 +192,10 @@ function $hex(context:RuntimeContext, input:HexableValue) {
   return BigInt("0x" + Enc.strToHex(input));
 }
 
+function $pad(context:RuntimeContext, input:HexableValue, lengthInBytes:number, side:("left"|"right") = "left") {
+  return new Padded(input, lengthInBytes, side);
+}
+
 // Ideas: 
 //
 // $keccak -> sha3, for defining solidity functions
@@ -225,6 +229,7 @@ export const expressionFunctions:Record<string, ExpressionFunction> = {
   $concat,
   $hex,
   $jumpmap,
+  $pad,
   $ptr
 }
 

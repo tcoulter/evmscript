@@ -297,6 +297,36 @@ describe("Expression Functions", () => {
     })
   })
 
+  describe("$pad()", () => {
+    it("correctly pads left", () => {
+      let code = `
+        push4(
+          $pad(1, 4)
+        )
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x6300000001"
+      )
+    })
+
+    it("correctly pads right", () => {
+      let code = `
+        push4(
+          $pad(1, 4, "right")
+        )
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x6301000000"
+      )
+    })
+  })
+
   describe("$set()", () => {
     it("should create deployable bytecode when $set('deployable', true) is used", () => {
       let code = `
@@ -379,3 +409,6 @@ describe("README example", () => {
     )
   })
 })
+
+// TODO: Error messages on function sanitization
+// TODO: Error messages when attempting to redefine a built in function
