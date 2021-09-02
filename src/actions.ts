@@ -6,10 +6,11 @@ import {
   Expression,
   ConcatedHexValue,
   JumpMap,
-  Hexable,
   WordRange,
   ByteRange,
-  restrictInput
+  restrictInput,
+  Padded,
+  SolidityString
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from ".";
@@ -120,11 +121,36 @@ function insert(context:RuntimeContext, ...args:HexableValue[]) {
 
 function revert(context:RuntimeContext, input:HexableValue) {
   if (typeof input != "undefined") {
-    push(context, byteLength(input));
-    push(context, $ptr(context, "automatic____")) // push label
-    insert(context, input) // insert code
+    // TODO: Replace this with ABI encoding helpers
+    // Spec here: https://docs.soliditylang.org/en/v0.8.7/abi-spec.html#examples
+    alloc(context, new ConcatedHexValue(
+      0x08c379a0,                     // Triggers "revert reason"
+      new Padded(0x20, 32),           // Part of ABI encoding: it says that the data starts at the next word
+      new SolidityString(input)
+    ));
   } 
   context.intermediate.push(Instruction.REVERT);
+}
+
+function assertNonPayable(context:RuntimeContext, input:HexableValue) {
+  let skipRevert = context.getActionSource(true);
+  let skipRevertPtr = skipRevert.getPointer();
+
+  Array.prototype.push.apply(context.intermediate, [
+    Instruction.CALLVALUE,
+    Instruction.ISZERO,
+    Instruction.PUSH2,
+    skipRevertPtr,
+    Instruction.JUMPI
+  ])
+
+  if (typeof input == "undefined") {
+    bail(context);
+  } else {
+    revert(context, input);
+  }
+
+  context.intermediate.push(skipRevert);
 }
 
 // Revert with no message
@@ -136,8 +162,6 @@ function bail(context:RuntimeContext) {
     Instruction.REVERT
   ]);
 }
-
-//function reverti(context)
 
 function $set(context:RuntimeContext, key:string, value:string) {
   // TODO: key and value check; don't let users set wrong stuff/set incorrectly
@@ -188,11 +212,13 @@ function $hex(context:RuntimeContext, input:HexableValue) {
 export const actionFunctions:Record<string, ActionFunction> = {
   alloc,
   allocUnsafe,
+  assertNonPayable,
   bail,
-  push,
   insert,
   jump,
-  jumpi
+  jumpi,
+  push,
+  revert
 }
 
 specificPushFunctions.forEach((fn, index) => {

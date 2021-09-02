@@ -1,12 +1,6 @@
 // We're using our own preprocessor to create the deployer! 
 // Bytecode to be deployed will be set in the CODE variable
 
-callvalue()               // Don't allow the constructor to be payable
-iszero()                  // If the call value is 0, jump past the revert
-jumpi($ptr("deploy"))     // 
-bail()                    // If we got here, show's over, revert
-
-deploy = 
-  allocUnsafe(CODE)       // Get CODE in memory by first storing 
-                          // CODE within the bytecode, then use CODECOPY
-  ret()                   // allocUnsafe() preps the stack for a return! 
+assertNonPayable()      // Make sure nobody sends Ether to the constructor
+allocUnsafe(CODE)       // Get CODE in memory using CODECOPY
+ret()                   // allocUnsafe() preps the stack for a return! 

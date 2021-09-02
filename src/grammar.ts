@@ -322,6 +322,57 @@ export class WordRange extends ByteRange {
   }
 }
 
+export class Padded extends Hexable {
+  item:HexableValue;
+  lengthInBytes:number;
+  side:("left"|"right");
+
+  constructor(item:HexableValue, lengthInBytes: number, side:("left"|"right") = "left") {
+    super();
+    this.item = item;
+    this.lengthInBytes = lengthInBytes;
+    this.side = side;
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation) {
+    let bytecode = translateToBytecode(this.item, executedCodeContext, codeLocations);
+
+    if (this.side == "left") {
+      return leftPad(bytecode, this.lengthInBytes)
+    } else {
+      return rightPad(bytecode, this.lengthInBytes);
+    }
+  }
+
+  byteLength() {
+    return this.lengthInBytes;
+  }
+}
+
+export class SolidityString extends Hexable {
+  str:HexableValue;
+  length = 0;
+
+  constructor(str:HexableValue) {
+    super();
+    this.str = str;
+    this.length = byteLength(str);
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation) {
+    let value = new ConcatedHexValue(
+      new Padded(this.length, 32),
+      new Padded(this.str, 32, "right")
+    )
+    
+    return value.toHex(executedCodeContext, codeLocations);
+  }
+
+  byteLength() {
+    return 32 + (this.length + (32 - this.length % 32));
+  }
+}
+
 export class JumpMap extends Hexable {
   items:ConcatedHexValue;
 

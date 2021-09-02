@@ -136,4 +136,54 @@ describe("Integration", () => {
     expect(unsafeGasUsed).toBeLessThan(safeGasUsed);
   })
 
+  it("should revert if Ether sent during deployment", async () => {
+    let code = `
+      $set("deployable", true)
+
+      alloc($hex("hello"))
+      ret()
+    `
+
+    let bytecode = preprocess(code);
+    let error:Error;
+
+    try {
+      let tx = await signer.sendTransaction({
+        data: bytecode,
+        value: 0x1 // 1 wei
+      })
+
+      console.log("Transaction didn't error!", tx);
+    } catch (e) {
+      error = e;
+    }
+    
+    expect(error).toBeDefined();
+    expect(error.message).toContain("VM Exception while processing transaction: revert")
+  })
+
+  it("alloc's automatically if data passed to revert", async () => {
+    // Note: This is non-deployable. We're just gonna execute code passed in.
+    // Also note: I used this site as an oracle: https://github.com/graphprotocol/support/issues/21
+    let code = `
+      revert($hex("Price is not valid"))
+    `
+
+    let bytecode = preprocess(code);
+    let error:Error;
+
+    try {
+      let tx = await signer.sendTransaction({
+        data: bytecode
+      })
+
+      console.log("Transaction didn't error!", tx);
+    } catch (e) {
+      error = e;
+    }
+    
+    expect(error).toBeDefined();
+    expect(error.message).toContain("Price is not valid")
+  })
+
 })
