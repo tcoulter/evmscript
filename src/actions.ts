@@ -193,11 +193,6 @@ function $hex(context:RuntimeContext, input:HexableValue) {
 }
 
 // Ideas: 
-// 
-// $hex -> convert to hex
-// e.g., $hex("this is a revert string")
-//
-// revert("this is a revert string")  // even better?
 //
 // $keccak -> sha3, for defining solidity functions
 // e.g. $keccak("setOwner(address)").substring(0, 4)
