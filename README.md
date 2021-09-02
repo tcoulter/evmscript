@@ -155,7 +155,7 @@ The following lists the helper functions available for preprocessing. Each funct
 #### Types: 
 
 * `Action`: Adds instructions to the code. Also can manipulate the stack, consuming stack data and/or pushing new values.
-* `Expression`: Does not add instructions to the node nor manipulate the stack. Used solely during preprocessing. Expression functions start with `$`.
+* `Expression`: Does not add instructions to the code nor manipulate the stack. Used solely during preprocessing. Expression functions start with `$`.
 
 #### Stack definition: 
 
