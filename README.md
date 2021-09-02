@@ -188,7 +188,7 @@ push($ptr("somelabel"))   // Push a code pointer to "somelabel" (see jump())
 
 This function is exactly like `push()`, except that it enforces the byte length of the input and errors if the input does not equal the expected length. 
 
-Avaiable functions range from `push1()` to `push32()`.
+Available functions range from `push1()` to `push32()`.
 
 Definition: `Action: [], pushX(input:HexableValue) => [input, ...]`
 
@@ -343,14 +343,14 @@ revert()
 
 ### assertNonPayable(input:HexableValue)
 
-Will revert Ether has been sent to the transaction. If `input` is passed, it'll be used as the revert reason string. See `revert()`. 
+Will revert if Ether has been sent to the transaction. If `input` is passed, it'll be used as the revert reason string. See `revert()`. 
 
 Definitions: 
 - `Action: [], assertNonPayable(input:Hexable) => []`
 - `Action: [], assertNonPayable() => []`
 
 ```javascript
-assertNonPayable("contract does not accept Ether!");
+assertNonPayable("Do not send Ether!");
 
 // With no reason string, assertNonPayable() is equivalent to: 
 
