@@ -11,9 +11,15 @@ export class RuntimeContext {
   tail: IntermediateRepresentation[] = [];
   actionIndex: number = -1;
 
-  getActionSource() {
+  getActionSource(isJumpDestination = false) {
     this.actionIndex += 1;
-    return new ActionSource(this.actionIndex);
+    let actionSource = new ActionSource(this.actionIndex);
+
+    if (isJumpDestination) {
+      actionSource.setIsJumpDestination()
+    }
+
+    return actionSource;
   }
 }
 
