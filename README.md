@@ -57,7 +57,7 @@ push(0x80)        // 2. Calculate the offset for the index based on start of the
 add()
 
 mload()           // 3. Load 32 bytes from the index offset onto the stack
-push(30)          // and get rid of the 30 we don't need.
+push(240)         // and get rid of the 30 we don't need (bitwise shift).
 shr()             //
 
 jump()            // And 4. Viola! Jump to the desired location.
