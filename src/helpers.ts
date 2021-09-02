@@ -1,6 +1,6 @@
 import { ActionFunction, ContextFunction, ExpressionFunction } from "./actions";
 import {ActionPointer, ActionSource, ConcatedHexValue, Expression, Hexable, HexableValue, IntermediateRepresentation, LabelPointer, sanitize} from "./grammar";
-import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from ".";
+import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from ".";
 
 export type UserFacingFunction = (...args: Expression[]) => Expression|ActionPointer;
 
@@ -52,16 +52,16 @@ export function createExpressionAndContextHandlers(runtimeContext:RuntimeContext
   return handler;
 }
 
-export function translateToBytecode(item:IntermediateRepresentation, executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string {
+export function translateToBytecode(item:IntermediateRepresentation, executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
   let bytecode = "";
 
   if (item instanceof Hexable) {
-    bytecode = item.toHex(executedCodeContext, jumpDestinations);
+    bytecode = item.toHex(executedCodeContext, codeLocations);
   } else {
     bytecode = item.toString(16);
   }
 
-  return ensureFullByte(bytecode);
+  return ensureFullByte(bytecode).toUpperCase();
 }
 
 export function leftPad(bytecode:string, byteLength:number) {
@@ -81,9 +81,5 @@ export function rightPad(bytecode:string, byteLength:number) {
 }
 
 export function ensureFullByte(bytecode:string) {
-  while (bytecode.length % 2 != 0) {
-    bytecode = "0" + bytecode;
-  }
-
-  return bytecode
+  return leftPad(bytecode, 1);
 }

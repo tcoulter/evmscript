@@ -80,7 +80,7 @@ When looking for an alternative beyond Yul, what I quickly realized was that wri
 
 * A generalized `push()` function, which choosed the correct `PUSH*` instruction based on input
 * Named jump destinations, and `jump()` and `jumpi()` functions that will calculate the correct jump destination based on the name passed in. As well, named code locations that can be pointed to and resolved during preprocessing (see our own [deployer](./src/deployer.bytecode)).
-* Helpful common routines like `getmem()`, which pushes `0x40` and calls `MLOAD` to read the free memory pointer.
+* Helpful common routines like `alloc()` that loads arbitrarily-sized data into memory (and `allocUnsafe()`, which can do it more cheaply but it comes with some safety tradeoffs). Both `alloc()` and `allocUnsafe()` pair well with `ret()` and `revert()`, teeing up the stack to so you can use those functions directly afterward -- no futzing with pushing large pieces of data, data lengths, and byte shifting. Oh, and do you want to get out quick with no revert message? Use `bail()`!
 * Preprocessing-specific functions that can help you craft the right data, such as `$concat()` which concatenates hex values; `$bytelen()` which calculates the byte length of arbitrary input; and `$ptr()` which will give you the bytecode-location of any named code location. 
 * Helpers like `$set("deployable", true)`, which add the necessary bytecode to ensure your code creates a deployable contract. 
 * Ability to define constants and variables within your code, as well as your own preprocessing functions to greatly reduce copy/paste.
@@ -116,9 +116,6 @@ let bytecode = preprocess(code, {
 // Then use that bytecode in a transaction. This example uses  
 // the `ethers` package. We also assume your bytecode is set 
 // to deployable.
-
-// Do the processing
-let bytecode = preprocess(code);
 
 // Set up ethers
 let provider = new ethers.providers.JsonRpcProvider();

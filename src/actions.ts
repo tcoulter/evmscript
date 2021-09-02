@@ -5,16 +5,23 @@ import {
   HexableValue,
   Expression,
   ConcatedHexValue,
-  JumpMap
+  JumpMap,
+  Hexable,
+  WordRange,
+  ByteRange,
+  restrictInput
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from ".";
+import Enc from "@root/encoding";
 
 export type ActionFunction = (context:RuntimeContext, ...args: HexableValue[]) => void;
 export type ExpressionFunction = (context:RuntimeContext, ...args: Expression[]) => HexableValue;
 export type ContextFunction = (context:RuntimeContext, ...args: Expression[]) => void;
 
 function push(context:RuntimeContext, input:HexableValue) {
+  restrictInput(input, "push");
+
   Array.prototype.push.apply(context.intermediate, [
     Instruction["PUSH" + byteLength(input)],
     input
@@ -40,16 +47,60 @@ let specificPushFunctions:Array<ActionFunction> =  Array.from(Array(32).keys()).
   }
 })
 
-function getmem(context:RuntimeContext) {
-  Array.prototype.push.apply(context.intermediate, [
-    Instruction.PUSH1,
-    BigInt(0x40),
-    Instruction.MLOAD
-  ]);
+// push input to stack in word by word and load into memory 
+function alloc(context:RuntimeContext, input:HexableValue) {
+  let length = byteLength(input);
+  let wordIndex = 0;
+
+  // Leave [offset, length,...] at the top of the stack
+  push(context, length /*+ (32 - (length % 32))*/)
+  context.intermediate.push(Instruction.MSIZE)                                    
+
+  do {
+    // If we don't have a full word, use a byte range and shift
+    // the data into position. This allows us to deploy less bytecode.
+    let bytesLeft = length - (wordIndex * 32);
+    if (bytesLeft < 32) {
+      push(context, new ByteRange(input, wordIndex * 32, bytesLeft)) // Only push what we need
+      push(context, (32 - bytesLeft) * 8)                            // Then shift left what's left (bitwise shift)
+      context.intermediate.push(Instruction.SHL);
+    } else {
+      push(context, new WordRange(input, wordIndex));   // Push 1 word to stack
+    }
+    
+    context.intermediate.push(Instruction.MSIZE)      // Get the latest free memory offset
+    context.intermediate.push(Instruction.MSTORE)     // Store word in memory
+
+    wordIndex += 1;
+  } while(wordIndex * 32 < length)
+}
+
+// Like alloc, but uses CODECOPY to load into memory. 
+// Costs less gas, but could potentially insert JUMPDEST's that 
+// could be jumped to accidentally/maliciously. 
+function allocUnsafe(context:RuntimeContext, input:HexableValue) {
+  let length = byteLength(input);
+
+  let inputStart = context.getActionSource();
+  let inputStartPtr = inputStart.getPointer();
+
+  push(context, length);                            // Push the byte length of the input
+  context.intermediate.push(Instruction.MSIZE);     // Get a free memory pointer       
+  
+  context.intermediate.push(Instruction.DUP2);      // Make a copy of the length   
+  push(context, inputStartPtr);    // Push the offset of the code where _codeptr__ is stored
+  context.intermediate.push(Instruction.DUP3);      // Copy the free memory pointer from above
+  context.intermediate.push(Instruction.CODECOPY)   // Copy code into memory     
+
+  //// Just tail things below:
+
+  context.tail.push(inputStart);                    // Add start label and input at the end of
+  context.tail.push(input)                          // the bytecode.
 }
 
 function jump(context:RuntimeContext, input:HexableValue) {
   if (typeof input != "undefined") {
+    restrictInput(input, "jump");
     push(context, input);
   }
   context.intermediate.push(Instruction.JUMP);
@@ -57,6 +108,7 @@ function jump(context:RuntimeContext, input:HexableValue) {
 
 function jumpi(context:RuntimeContext, input:HexableValue) {
   if (typeof input != "undefined") {
+    restrictInput(input, "jumpi");
     push(context, input);
   }
   context.intermediate.push(Instruction.JUMPI);
@@ -65,6 +117,27 @@ function jumpi(context:RuntimeContext, input:HexableValue) {
 function insert(context:RuntimeContext, ...args:HexableValue[]) {
   Array.prototype.push.apply(context.intermediate, args);
 }
+
+function revert(context:RuntimeContext, input:HexableValue) {
+  if (typeof input != "undefined") {
+    push(context, byteLength(input));
+    push(context, $ptr(context, "automatic____")) // push label
+    insert(context, input) // insert code
+  } 
+  context.intermediate.push(Instruction.REVERT);
+}
+
+// Revert with no message
+function bail(context:RuntimeContext) {
+  Array.prototype.push.apply(context.intermediate, [
+    Instruction.PUSH1,
+    BigInt(0x0),
+    Instruction.DUP1,
+    Instruction.REVERT
+  ]);
+}
+
+//function reverti(context)
 
 function $set(context:RuntimeContext, key:string, value:string) {
   // TODO: key and value check; don't let users set wrong stuff/set incorrectly
@@ -87,6 +160,14 @@ function $bytelen(context:RuntimeContext, input:HexableValue) {
   return byteLength(input);
 }
 
+function $hex(context:RuntimeContext, input:HexableValue) {
+  if (typeof input != "string") {
+    throw new Error("Function $hex() can only be used on string literals.")
+  }
+
+  return BigInt("0x" + Enc.strToHex(input));
+}
+
 // Ideas: 
 // 
 // $hex -> convert to hex
@@ -105,8 +186,10 @@ function $bytelen(context:RuntimeContext, input:HexableValue) {
 //  insert(...hex string..) -> directly insert bytecode at specified position. Check validity?
 
 export const actionFunctions:Record<string, ActionFunction> = {
+  alloc,
+  allocUnsafe,
+  bail,
   push,
-  getmem,
   insert,
   jump,
   jumpi
@@ -119,6 +202,7 @@ specificPushFunctions.forEach((fn, index) => {
 export const expressionFunctions:Record<string, ExpressionFunction> = {
   $bytelen,
   $concat,
+  $hex,
   $jumpmap,
   $ptr
 }

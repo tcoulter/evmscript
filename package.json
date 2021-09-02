@@ -1,6 +1,6 @@
 {
   "name": "evmscript",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Write EVM assembly using Javascript!",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -14,6 +14,7 @@
   "author": "Tim Coulter <tim@timothyjcoulter.com>",
   "license": "MIT",
   "dependencies": {
+    "@root/encoding": "^1.0.1",
     "@types/yargs": "^17.0.2",
     "yargs": "^17.1.1"
   },

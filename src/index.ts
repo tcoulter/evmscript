@@ -7,7 +7,8 @@ import { byteLength, createActionHandler, createExpressionAndContextHandlers, tr
 
 export class RuntimeContext {
   deployable: boolean = false;
-  intermediate: IntermediateRepresentation[] = []
+  intermediate: IntermediateRepresentation[] = [];
+  tail: IntermediateRepresentation[] = [];
   actionIndex: number = -1;
 
   getActionSource() {
@@ -19,7 +20,7 @@ export class RuntimeContext {
 export type CodeContext = Record<string, UserFacingFunction>;
 export type ExecutedCodeContext = Record<string, any>;
 
-export type ActionIndexToJumpDest = Record<number, BigInt>;
+export type ActionIndexToCodeLocation = Record<number, BigInt>;
 
 export function preprocess(code:string, extraContext:Record<string, any> = {}):string {
 
@@ -92,6 +93,10 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
   //// an intermediate representation.
   vm.runInNewContext(code, codeContext);
 
+  // After processing, concatenate the intermediate representation and tail data
+  runtimeContext.intermediate = [...runtimeContext.intermediate, ...runtimeContext.tail];
+  runtimeContext.tail = [] // for good measure
+
   // Note: After execution, node can set values of any type to the context,
   // so we can't rely on types here. Let's make that explicit.
   let executedCodeContext:ExecutedCodeContext = codeContext;
@@ -109,7 +114,7 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
   // 1. Compute the byte lengths of each item in the intermediate representation
   // 2. Sum result to determine the total bytes at each index
   // 3. Create a record of ActionSource indeces -> total bytes, as this represents the jump destination 
-  let jumpDestinations:ActionIndexToJumpDest = {};
+  let codeLocations:ActionIndexToCodeLocation = {};
   let byteLengths = runtimeContext.intermediate
     .map((item) => byteLength(item))
 
@@ -127,7 +132,7 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
       }
 
       // Don't include the current byte length as that'll point to the following byte! 
-      jumpDestinations[item.actionIndex] = BigInt(totalBytes - byteLengths[index]);
+      codeLocations[item.actionIndex] = BigInt(totalBytes - byteLengths[index]);
     })
 
   // Now loop through the intermediate representation translating
@@ -135,7 +140,7 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
   let bytecode = [];
 
   runtimeContext.intermediate.forEach((item) => {
-    let translation = translateToBytecode(item, executedCodeContext, jumpDestinations);
+    let translation = translateToBytecode(item, executedCodeContext, codeLocations);
 
     if (translation) {
       bytecode.push(translation);

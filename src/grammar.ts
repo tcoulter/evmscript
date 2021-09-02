@@ -1,6 +1,6 @@
 import { number, string } from "yargs";
 import { byteLength, leftPad, POINTER_BYTE_LENGTH, rightPad, translateToBytecode } from "./helpers";
-import { ActionIndexToJumpDest, ExecutedCodeContext, RuntimeContext } from ".";
+import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from ".";
 
 export enum Instruction {
   STOP = 0x00,
@@ -167,7 +167,7 @@ export enum ConfigKeys {
 }
 
 export abstract class Hexable {
-  abstract toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string;
+  abstract toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string;
   abstract byteLength():number;
 }
 
@@ -186,20 +186,41 @@ export class LabelPointer extends Hexable {
     this.labelName = labelName;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
     let actionPointer = executedCodeContext[this.labelName];
 
     if (!actionPointer || !(actionPointer instanceof ActionPointer)) {
       throw new Error("Unknown label pointer '" + this.labelName + "' or label set incorrectly. Make sure to always set variables to the result of an action function (a function that *doesn't* start with $).");
     }
     
-    return actionPointer.toHex(executedCodeContext, jumpDestinations);
+    return actionPointer.toHex(executedCodeContext, codeLocations);
   }
 
   byteLength() {
     return POINTER_BYTE_LENGTH;
   }
 }
+
+export class ActionPointer extends Hexable {
+  actionSource:ActionSource;
+
+  constructor(actionSource:ActionSource) {
+    super();
+    this.actionSource = actionSource;
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string { 
+    return leftPad(
+      codeLocations[this.actionSource.actionIndex].toString(16),
+      POINTER_BYTE_LENGTH
+    );
+  }
+
+  byteLength() {
+    return POINTER_BYTE_LENGTH;
+  }
+}
+
 export class ActionSource extends Hexable {
   actionIndex = 0;
   isJumpDestination = false;
@@ -213,9 +234,9 @@ export class ActionSource extends Hexable {
     return new ActionPointer(this);
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string { 
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string { 
     if (this.isJumpDestination) {
-      return translateToBytecode(Instruction.JUMPDEST, executedCodeContext, jumpDestinations);
+      return translateToBytecode(Instruction.JUMPDEST, executedCodeContext, codeLocations);
     }
 
     return "";
@@ -230,26 +251,6 @@ export class ActionSource extends Hexable {
   }
 }
 
-export class ActionPointer extends Hexable {
-  actionSource:ActionSource;
-
-  constructor(actionSource:ActionSource) {
-    super();
-    this.actionSource = actionSource;
-  }
-
-  toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string { 
-    return leftPad(
-      jumpDestinations[this.actionSource.actionIndex].toString(16),
-      POINTER_BYTE_LENGTH
-    );
-  }
-
-  byteLength() {
-    return POINTER_BYTE_LENGTH;
-  }
-}
-
 export class ConcatedHexValue extends Hexable {
   items:HexableValue[] = [];
 
@@ -258,9 +259,9 @@ export class ConcatedHexValue extends Hexable {
     this.items = items;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
     let bytecode = this.items
-      .map<string>((item) => translateToBytecode(item, executedCodeContext, jumpDestinations))
+      .map<string>((item) => translateToBytecode(item, executedCodeContext, codeLocations))
       .join("");
 
     return bytecode;
@@ -274,6 +275,52 @@ export class ConcatedHexValue extends Hexable {
     return length;
   }
 }
+export class ByteRange extends Hexable {
+  item:HexableValue;
+  startPositionInBytes:number;
+  lengthInBytes:number;
+
+  constructor(item:HexableValue, startPositionInBytes:number = 0, lengthInBytes:number = 2) {
+    super();
+
+    let actualByteLength = byteLength(item);
+
+    if (startPositionInBytes > actualByteLength) {
+      throw new Error(`ByteRange start position longer than input. Received: ${startPositionInBytes}, Actual bytes: ${actualByteLength}`)
+    }
+
+    this.item = item;
+    this.startPositionInBytes = startPositionInBytes;
+    this.lengthInBytes = lengthInBytes;
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+    // This is naive, and will convert the item to hex multiple 
+    // times if other ranges exist over the same data. That's fine for now. 
+    let bytecode = translateToBytecode(this.item, executedCodeContext, codeLocations);
+    let chunk = bytecode.substr(this.startPositionInBytes * 2, this.lengthInBytes * 2);
+    return rightPad(chunk, this.lengthInBytes);
+  }
+
+  byteLength() {
+    return this.lengthInBytes;
+  }
+}
+
+export class WordRange extends ByteRange {
+  constructor(item:HexableValue, startPositionInWords:number = 0, lengthInWords:number = 1) {
+    let actualByteLength = byteLength(item);
+
+    let startPositionInBytes = startPositionInWords * 32;
+    let lengthInBytes = lengthInWords * 32;
+
+    if (startPositionInBytes > actualByteLength) {
+      throw new Error(`WordRange start position longer than input. Received: ${startPositionInWords}, Actual words: ${startPositionInWords % 32 != 0 ? "<" : ""}${Math.ceil(startPositionInWords / 32)}`)
+    }
+
+    super(item, startPositionInBytes, lengthInBytes);
+  }
+}
 
 export class JumpMap extends Hexable {
   items:ConcatedHexValue;
@@ -283,9 +330,9 @@ export class JumpMap extends Hexable {
     this.items = new ConcatedHexValue(...items.map((str) => new LabelPointer(str)));
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, jumpDestinations:ActionIndexToJumpDest):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
     return rightPad(
-      this.items.toHex(executedCodeContext, jumpDestinations),
+      this.items.toHex(executedCodeContext, codeLocations),
       32
     )
   }
@@ -332,10 +379,6 @@ export function sanitize(input:Expression|HexableValue, functionName:string, isV
   
   if (isValue) {
     sanitized = _sanitizeHexable(input);
-
-    if (byteLength(sanitized) > 32) {
-      throw new Error("Function " + functionName + "() cannot accept values larger than 32 bytes.");
-    }
   } else {
     sanitized = _sanitizeExpression(input);
   }
@@ -345,4 +388,10 @@ export function sanitize(input:Expression|HexableValue, functionName:string, isV
   } else {
     throw new Error("Function " + functionName + "() cannot accept value of: " + input + ". If you're jumping to a named code location with jump(), use jump($ptr('name')).");
   } 
+}
+
+export function restrictInput(input:HexableValue, functionName:string) {
+  if (byteLength(input) > 32) {
+    throw new Error("Function " + functionName + "() cannot accept values larger than 32 bytes.");
+  }
 }

@@ -213,16 +213,32 @@ describe('Action Functions', function() {
     })
   })
 
-  describe("getmem()", () => {
-    it("should push the right opcodes", () => {
+  describe("alloc()", () => {
+    it("should get data into memory in word chunks, leaving [memory offset, byte length,...] on stack (input < 32 bytes)", () => {
       let code = `
-        getmem()
+        alloc(0x1)
       `
 
       let bytecode = preprocess(code);
 
+      // Note that in this case, the input is less than 32 bytes, 
+      // so a separate algorithm is used to push the data
       expect(bytecode).toBe(
-        "0x604051"
+        "0x600159600160F81B5952"
+      )
+    })
+
+    it("should get data into memory in word chunks, leaving [memory offset, byte length,...] on stack (input < 32 bytes)", () => {
+      let code = `
+        alloc("0x1000111122223333444455556666777788889999AAAABBBBCCCCDDDDEEEEFFFF0000")
+      `
+
+      let bytecode = preprocess(code);
+
+      // Note that in this case, the input is less than 32 bytes, 
+      // so a separate algorithm is used to push the data
+      expect(bytecode).toBe(
+        "0x6022597F1000111122223333444455556666777788889999AAAABBBBCCCCDDDDEEEEFFFF595261000060F01B5952"
       )
     })
   })
@@ -265,6 +281,22 @@ describe("Expression Functions", () => {
     })
   })
 
+  describe("$hex()", () => {
+    // Using this as my oracle: https://onlineunicodetools.com/convert-unicode-to-hex
+
+    it("correctly converts unicode strings to hex", () => {
+      let code = `
+        push($hex("This is some text"))
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x705468697320697320736F6D652074657874"
+      )
+    })
+  })
+
   describe("$set()", () => {
     it("should create deployable bytecode when $set('deployable', true) is used", () => {
       let code = `
@@ -280,7 +312,7 @@ describe("Expression Functions", () => {
       // remove JUMPDEST if not used in jumps.
 
       expect(deployedBytecode).toBe(
-        "0x341561000A57600080FD5B6003604051816100178239F3" + expectedRuntimeBytecode
+        "0x341561000A57600080FD5B600359816100158239F3" + expectedRuntimeBytecode
       )
     })
   })
@@ -342,8 +374,8 @@ describe("README example", () => {
     let bytecode = preprocess(code);
 
     expect(bytecode).toBe(
-      "0x341561000A57600080FD5B600F604051816100178239F360005B600101806005116100025700"
-      // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ deployment preamble
+      "0x341561000A57600080FD5B600F59816100158239F360005B600101806005116100025700"
+      // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ deployment preamble
     )
   })
 })
