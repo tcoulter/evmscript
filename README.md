@@ -150,7 +150,7 @@ Note for TODO: We should show here how to use Javascript niceties, higher level 
 
 ## Function Defintion
 
-The following lists the helper functions available for preprocessing. Each function contains a type, which is either an `Action` or `Expression`, and a definition that describes how it manipulates the stack. Here's how to reas this: 
+The following lists the helper functions available for preprocessing. Each function contains a type, which is either an `Action` or `Expression`, and a definition that describes how it manipulates the stack. Here's how to read this: 
 
 #### Types: 
 
