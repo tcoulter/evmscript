@@ -146,6 +146,226 @@ let value:ethers.BigNumber = await contract.myFunc();
 
 TODO. For now, see [the tests](./test).
 
+Note for TODO: We should show here how to use Javascript niceties, higher level examples, environment variables, injected variables, etc., and not just function definitions. 
+
+## Function Defintion
+
+The following lists the helper functions available for preprocessing. Each function contains a type, which is either an `Action` or `Expression`, and a definition that describes how it manipulates the stack. Here's how to reas this: 
+
+#### Types: 
+
+* `Action`: Adds instructions to the code. Also can manipulate the stack, consuming stack data and/or pushing new values.
+* `Expression`: Does not add instructions to the node nor manipulate the stack. Used solely during preprocessing. Expression functions start with `$`.
+
+#### Stack definition: 
+
+Read the stack definition like the following: 
+
+`[consumed stack, ...], <function> => [items added to the stack, ...]`
+
+In these defintiions, the left most data in stack arrays `[]` is the stack top. 
+
+### push(input:HexableValue)
+
+Pushes an arbitrary amount of data (1 to 32 bytes) to the stack. This function will automatically determine the correct `PUSH*` instruction to use based on input data.
+
+Definition: `Action: [], push(input:HexableValue) => [input, ...]`
+
+Input can be of type `number`, `BigInt`, 0x-prefixed `string`, or a code pointer.
+
+```javascript
+push(5)                   // number
+push(0x1)                 // hex number
+push("0x10101010")        // 0x-prefixed string
+push(128n)                // bigint
+
+push($ptr("somelabel"))   // Push a code pointer to "somelabel" (see jump())
+                          // Will be translated to the correct code location
+                          // during preprocessing. 
+```
+
+### pushX(input:HexableValue)
+
+This function is exactly like `push()`, except that it enforces the byte length of the input and errors if the input does not equal the expected length. 
+
+Avaiable functions range from `push1()` to `push32()`.
+
+Definition: `Action: [], pushX(input:HexableValue) => [input, ...]`
+
+```javascript
+push4(0x01020304) // Valid! 
+push5(0x01020304) // Errors! Expects 5 bytes.
+```
+
+### alloc(input:HexableValue)
+
+Allocate a preprocessed value in memory using a series of `push()`'s and `mstore()`'s. `input` can be of arbitrary length. Will push the memory offset and the input length to the stack for use after allocation. 
+
+Definition: `Action: [], alloc(input:HexableValue) => [offset, length, ...]`
+
+```javascript
+// This example allocates an ABI-encoded string that'll be consumed
+// by revert() as a revert reason string (triggered by 0x08c379a0).
+// This is only an example - you don't need to do this yourself! 
+// See revert() definition.
+let ERROR_MESSAGE = $hex("This is an error message!");
+alloc(
+  $concat(
+    "0x08c379a0",                         
+    $pad(0x20, 32),
+    $pad($bytelen(ERROR_MESSAGE), 32, "right"),
+    ERROR_MESSAGE
+  )
+)
+revert()
+```
+
+### allocUnsafe(input:HexableValue)
+
+This function does the exact same thing as `alloc()`, except it does so by inserting the input into the resultant bytecode and then using `CODECOPY` to get the data into memory. This is considered unsafe because the input to `allocUnsafe()` will be seen by the EVM as runnable code. Although `allocUnsafe()` will never run the input as code, it is technically possible to jump to any `JUMPDEST`'s contained within the input. `allocUnsafe()` has cheaper gas costs than `alloc()`. When in doubt, use `alloc()`. 
+
+Definition: `Action: [], alloc(input:HexableValue) => [offset, length, ...]`
+
+```javascript
+// This is an example deployment script using allocUnsafe().
+// Assume CODE is the code being deployed.
+
+assertNonPayable()  // The deployment shouldn't be payable
+allocUnsafe(CODE)
+
+// RETURN has everything it needs due to stack output of allocUnsafe()
+ret()  
+```
+
+### jump(input:HexableValue)
+
+Jump to the code location defined by `input`. If none is passed, this function will act as a normal `JUMP` instruction.
+
+The `jump()` function can take arbitrary data as input, as well as code pointers. Use `$ptr()` to jump to named code locations when the location variable hasn't yet been defined during execution of the preprocessor (e.g., when the code location is lower in the code than the jump instruction). You can use the variable itself after it has been defined. See `somelabel` in the example below.
+
+Definitions:
+- Using code location: `Action: [], jump(input:HexableValue) => []`
+- Normal jump: `Action: [location, ...] jump() => []` 
+
+```javascript
+// Jump using a pointer to "somelabel"
+jump($ptr("somelabel"))     
+
+somelabel = 
+  // ... some code ...
+
+  // Jump using variable reference
+  // Remember, this is Javascript. Variable has now been defined.
+  jump(somelabel)        
+  
+// Normal jump
+push(0x55)   
+jump()    // Pulls 0x55 from stack
+```
+
+### jumpi(input:HexableValue)
+
+This works exactly like `jump()` except that this function expects an added conditional value on the stack. 
+
+Definitions: 
+- Using code location: `Action: [conditional], jumpi(input:HexableValue) => []`
+- Normal jump: `Action: [location, conditional, ...] jumpi() => []` 
+
+```javascript
+// Loop example:
+
+push(0) // our index variable
+
+mainloop =
+  // ... do something, then check counter
+
+  push(1)     // add 1 to the index
+  add()
+  push(5)     // push 5 for comparison
+  dup2()      // copy the index
+  eq()        // consume 5 index and copy; push 1 if equal, 0 if not
+  
+  jumpi(mainloop)   // jump to mainloop if top of the stack is 1
+
+stop()
+```
+
+### insert(input:HexableValue)
+
+This function directly inserts a arbitrary value into the code. It does not check if the inserted value is valid code. This is used under the hood within `allocUnsafe()`, and contains the same safety risks. Use with caution. 
+
+Definition: `Action: [], insert(input:HexableValue) => []`
+
+```javascript
+push(0xAA)
+insert("0x6001")  // Insert 6001 directly into the code
+push(0xBB)
+
+// When run, the above code results in the following bytecode:
+// 
+// 0x60AA600160BB
+//       ^^^^     -> Directly inserted
+//   ^^^^    ^^^^ -> Filler for example purposes
+```
+
+### revert(input:HexableValue)
+
+Revert, causing the transaction to error. When `input` is defined, `revert()` will construct an ABI-encoded revert reason string using the `input` that external callers can underestand. When no `input` is given, this function is treated as a normal `REVERT` instruction. 
+
+Definitions:
+- When reason string is passed: `Action: [], revert(input:HexableValue) => []`
+- Normal revert: `Action: [offset, length, ...] revert() => []`
+
+```javascript
+// Will send "Bad input!" as the revert reason string
+revert($hex("Bad input!"))
+
+// Normal revert, passing no data
+push(0)
+dup(1)
+revert()
+```
+
+### bail()
+
+This is a simple helper that reverts with no reason string. 
+
+Definition: `Action: [], bail() => []`
+
+```javascript
+bail() // revert! 
+
+// bail() is equivalent to:
+push(0)
+dup(1)
+revert()
+```
+
+### assertNonPayable(input:HexableValue)
+
+Will revert Ether has been sent to the transaction. If `input` is passed, it'll be used as the revert reason string. See `revert()`. 
+
+Definitions: 
+- `Action: [], assertNonPayable(input:Hexable) => []`
+- `Action: [], assertNonPayable() => []`
+
+```javascript
+assertNonPayable("contract does not accept Ether!");
+
+// With no reason string, assertNonPayable() is equivalent to: 
+
+callvalue()       // Jump to allgood if no Ether
+iszero()           
+jumpi("allgood")   
+push(0)           // Ether passed? Bail. 
+dup1()             
+revert()          
+
+allgood = 
+  // ... continue onward
+
+```
+
 ### Development
 
 Set up:
