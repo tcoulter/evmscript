@@ -356,10 +356,8 @@ assertNonPayable("Do not send Ether!");
 
 callvalue()       // Jump to allgood if no Ether
 iszero()           
-jumpi("allgood")   
-push(0)           // Ether passed? Bail. 
-dup1()             
-revert()          
+jumpi($ptr("allgood"))   
+bail()           // Ether passed? Bail.           
 
 allgood = 
   // ... continue onward
