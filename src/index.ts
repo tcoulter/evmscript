@@ -1,6 +1,7 @@
 import vm from 'vm';
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { ExpressionFunction, actionFunctions, expressionFunctions, contextFunctions, ContextFunction } from "./actions";
 import { Instruction,IntermediateRepresentation, ActionPointer, ActionSource } from "./grammar";
 import { byteLength, createActionHandler, createExpressionAndContextHandlers, translateToBytecode, UserFacingFunction } from './helpers';
@@ -28,7 +29,7 @@ export type ExecutedCodeContext = Record<string, any>;
 
 export type ActionIndexToCodeLocation = Record<number, BigInt>;
 
-export function preprocess(code:string, extraContext:Record<string, any> = {}):string {
+export function preprocess(code:string, extraContext:Record<string, any> = {}, filename:string = "bytecode"):string {
 
   let runtimeContext:RuntimeContext = new RuntimeContext();
 
@@ -88,16 +89,43 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
   // Translate all internalFunctionPrefix'd keys to having the underscore removed, by adding
   // a preamble to the code. This ensures the user will receive an error if they
   // accidentally define a function of the same name. 
+  let preamble = "";
+
   Object.keys(codeContext).forEach((key) => {
     if (key.indexOf(internalFunctionPrefix) >= 0) {
       let nonPrefixedKey = key.replace(internalFunctionPrefix, "");
-      code = `const ${nonPrefixedKey} = this.${key};` + code;
+      preamble = preamble + `const ${nonPrefixedKey} = this.${key};` + os.EOL;
     }
   })
 
-  //// Run a first pass, which evaluates the input and turns it into
-  //// an intermediate representation.
-  vm.runInNewContext(code, codeContext);
+  code = preamble + code;
+
+  // Run a first pass, which evaluates the input and turns it into
+  // an intermediate representation.
+  try {
+    // When running runInNewContext, we set the filename if one was passed
+    // in, and we start line numbering so that it ignores the preamble.
+    vm.runInNewContext(code, codeContext, {
+      filename,
+      lineOffset: (-preamble.split(/\r?\n/).length) + 1
+    });
+  } catch (e) {
+    // Prune stack beyond bytecode 
+    if (e instanceof Error) {
+      let stackLines = e.stack.split(/\r?\n/);
+      let found = false;
+
+      e.stack = stackLines.filter((line) => {
+        if (!found && line.indexOf("at bytecode") >= 0) {
+          found = true;
+          return true;
+        }
+        return !found;
+      }).join(os.EOL)
+    }
+
+    throw e; 
+  } 
 
   // After processing, concatenate the intermediate representation and tail data
   runtimeContext.intermediate = [...runtimeContext.intermediate, ...runtimeContext.tail];
@@ -182,5 +210,5 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}):s
 
 export function preprocessFile(inputFile:string, extraContext:Record<string, any> = {}) {
   let input:string = fs.readFileSync(inputFile, "utf-8");
-  return preprocess(input, extraContext);
+  return preprocess(input, extraContext, inputFile);
 }

@@ -91,7 +91,7 @@ describe('Action Functions', function() {
       `
       expect(() => {
         preprocess(code);
-      }).toThrow();
+      }).toThrow("Expected input to be a hexable value");
     })
 
     it("should not allow pushing more than 32 bytes", () => {
@@ -101,7 +101,7 @@ describe('Action Functions', function() {
 
       expect(() => {
         let bytecode = preprocess(code);
-      }).toThrow("Function push() cannot accept values larger than 32 bytes.");
+      }).toThrow("Expected input to be less than or equal to 32 bytes");
     })
   })
 

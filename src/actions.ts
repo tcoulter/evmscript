@@ -8,20 +8,21 @@ import {
   JumpMap,
   WordRange,
   ByteRange,
-  restrictInput,
   Padded,
   SolidityString
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from ".";
 import Enc from "@root/encoding";
+import ensure from "./ensure";
 
 export type ActionFunction = (context:RuntimeContext, ...args: HexableValue[]) => void;
 export type ExpressionFunction = (context:RuntimeContext, ...args: Expression[]) => HexableValue;
 export type ContextFunction = (context:RuntimeContext, ...args: Expression[]) => void;
 
 function push(context:RuntimeContext, input:HexableValue) {
-  restrictInput(input, "push");
+  ensure(input).isHexable()
+  ensure(input).is32BytesOrLess();
 
   Array.prototype.push.apply(context.intermediate, [
     Instruction["PUSH" + byteLength(input)],
@@ -101,7 +102,7 @@ function allocUnsafe(context:RuntimeContext, input:HexableValue) {
 
 function jump(context:RuntimeContext, input:HexableValue) {
   if (typeof input != "undefined") {
-    restrictInput(input, "jump");
+    ensure(input).is32BytesOrLess();
     push(context, input);
   }
   context.intermediate.push(Instruction.JUMP);
@@ -109,7 +110,7 @@ function jump(context:RuntimeContext, input:HexableValue) {
 
 function jumpi(context:RuntimeContext, input:HexableValue) {
   if (typeof input != "undefined") {
-    restrictInput(input, "jumpi");
+    ensure(input).is32BytesOrLess();
     push(context, input);
   }
   context.intermediate.push(Instruction.JUMPI);
@@ -162,6 +163,8 @@ function bail(context:RuntimeContext) {
     Instruction.REVERT
   ]);
 }
+
+//function allocSolidityCallData
 
 function $set(context:RuntimeContext, key:string, value:string) {
   // TODO: key and value check; don't let users set wrong stuff/set incorrectly

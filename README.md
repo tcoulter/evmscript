@@ -184,13 +184,13 @@ push($ptr("somelabel"))   // Push a code pointer to "somelabel" (see jump())
                           // during preprocessing. 
 ```
 
-### pushX(input:HexableValue)
+### push<X>(input:HexableValue)
 
 This function is exactly like `push()`, except that it enforces the byte length of the input and errors if the input does not equal the expected length. 
 
-Available functions range from `push1()` to `push32()`.
+Available values of `X` range from `push1()` to `push32()`.
 
-Definition: `Action: [], pushX(input:HexableValue) => [input, ...]`
+Definition: `Action: [], push<X>(input:HexableValue) => [input, ...]`
 
 ```javascript
 push4(0x01020304) // Valid! 

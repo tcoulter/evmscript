@@ -396,22 +396,7 @@ export class JumpMap extends Hexable {
   }
 }
 
-// Refer to the HexableValue type for what should be allowed.
-function _sanitizeHexable(input:Expression):HexableValue {
-  if (input instanceof Hexable || typeof input == "bigint") {
-    return input;
-  } 
-  
-  if (typeof input == "number" || (typeof input =="string" && input.indexOf("0x") == 0)) {
-    return BigInt(input);
-  }
-
-  return;
-}
-
-function _sanitizeExpression(input:Expression):Expression {
-  let asHexable = _sanitizeHexable(input);
-
+export function sanitize(input:Expression|HexableValue, functionName:string):Expression {
   if (typeof input == "string") {
     if (input.indexOf("0x") == 0) {
       return BigInt(input);
@@ -427,31 +412,5 @@ function _sanitizeExpression(input:Expression):Expression {
     return input;
   }
 
-  return;
-}
-
-export function sanitize(input:Expression|HexableValue, functionName:string, isValue=false):Expression {
-  if (typeof input == "undefined") {
-    return undefined;
-  }
-
-  let sanitized;
-  
-  if (isValue) {
-    sanitized = _sanitizeHexable(input);
-  } else {
-    sanitized = _sanitizeExpression(input);
-  }
-
-  if (typeof sanitized != "undefined") {
-    return sanitized;
-  } else {
-    throw new Error("Function " + functionName + "() cannot accept value of: " + input + ". If you're jumping to a named code location with jump(), use jump($ptr('name')).");
-  } 
-}
-
-export function restrictInput(input:HexableValue, functionName:string) {
-  if (byteLength(input) > 32) {
-    throw new Error("Function " + functionName + "() cannot accept values larger than 32 bytes.");
-  }
+  throw new Error("Function " + functionName + "() cannot accept value of: " + input + ". If you're jumping to a named code location with jump(), use jump($ptr('name')).");
 }
