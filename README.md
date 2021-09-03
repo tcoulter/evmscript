@@ -334,7 +334,7 @@ stop()
 
 Evaluate the function signature passed within the call data (the first four bytes) and if that value matches a function within the record, jump to the pointer associated with with that function.
 
-This is best shown by example, so see below. That said, `solidityFunctionSignature` is string representation of the function, and `pointerObject` is the return value of `$ptr()`. 
+This is best shown by example, so see below. That said, `solidityFunctionSignature` is the string representation of the function, and `pointerObject` is the return value of `$ptr()`. 
 
 Note that `dispatch()` will not revert if the signature found in calldata doesn't match one provided.
 
