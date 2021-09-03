@@ -186,4 +186,40 @@ describe("Integration", () => {
     expect(error.message).toContain("Price is not valid")
   })
 
+  it("pushes the correct calldata offsets, first at top of stack", async () => {
+    let code = `
+      $set("deployable", true)
+
+      pushCallDataOffsets("uint", "bytes")
+
+      allocStack(3)
+      ret()
+    `
+
+    let bytecode = preprocess(code);
+
+    let tx = await signer.sendTransaction({data: bytecode})
+    let receipt = await provider.getTransactionReceipt(tx.hash);
+    expect(receipt.contractAddress).toBeDefined();
+
+    let contract = new ethers.Contract(receipt.contractAddress, [
+      "function getOffsets(uint, bytes) public returns(uint, uint, uint)"
+    ], signer);
+
+    let value:Array<ethers.BigNumber> = await contract.callStatic.getOffsets(5, ethers.BigNumber.from("0x123456")); 
+
+    // The call data for this call is the following:
+    // 
+    // 0 - 3:     bd3a5abd                                                            // 4 byte function identifier
+    // 4 - 35:    0000000000000000000000000000000000000000000000000000000000000005    // value of uint
+    // 36 - 67:   0000000000000000000000000000000000000000000000000000000000000040    // location in calldata of bytes
+    // 68 - 99:   0000000000000000000000000000000000000000000000000000000000000003    // byte length of bytes
+    // 100 - 31:  1234560000000000000000000000000000000000000000000000000000000000    // data of bytes
+
+    expect(value.length).toBe(3)
+    expect(value[0].toNumber()).toBe(5)     // For uint, we push the value
+    expect(value[1].toNumber()).toBe(100)   // For bytes, we push [data offset, length, ...]
+    expect(value[2].toNumber()).toBe(3)   
+  })
+
 })

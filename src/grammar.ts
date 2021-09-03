@@ -162,6 +162,12 @@ export enum Instruction {
   SELFDESTRUCT = 0xFF
 }
 
+export enum SolidityTypes {
+  uint = "uint",
+  bytes = "bytes",
+  string = "string"
+}
+
 export enum ConfigKeys {
   deployable = "deployable"
 }

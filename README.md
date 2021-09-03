@@ -197,6 +197,31 @@ push4(0x01020304) // Valid!
 push5(0x01020304) // Errors! Expects 5 bytes.
 ```
 
+## pushCallDataOffsets(...args:string[])
+
+Accept named solidity types, like `uint` and `bytes` that represent the expected call data, and push the values and offsets to the stack such that the first item in the call data is at the top of the stack. 
+
+Definition: `Action: [], pushCallDataOffsets(item1, ..., itemN) => [(offset1, length1)|value1, ..., (offsetN, lengthN)|valueN]`
+
+Currently supported types (more to come): 
+
+- `uint`
+- `bytes`
+
+For non-dynamic types, like `uint`, this function pushes `[value, ...]` to the stack, since there's no data offset or length necessary. For dynamic types like `bytes`, this function pushes `[offset, length, ...]` instead. Note that this function does not load the data of dynamic types - that's up to you and your application. As well, the offset returned for dynamic types is a calldata offset, and not a memory offset, so do not use `ret()` or `revert()` directly afterward.
+
+```javascript
+pushCallDataOffsets("uint", "bytes")
+
+// For the calldata representing (5, "0x123456"), you should expect the following stack:
+// 
+// 0: 000000...000005 (top)  // Value of 5
+// 1: 000000...000064        // Calldata offset of bytes data
+// 2: 000000...000003        // Length of bytes data
+```
+
+See [the integration tests](./test/integration.spec.ts) for an example. 
+
 ### alloc(input:HexableValue)
 
 Allocate a preprocessed value in memory using a series of `push()`'s and `mstore()`'s. `input` can be of arbitrary length. Will push the memory offset and the input length to the stack for use after allocation. 
@@ -235,6 +260,21 @@ allocUnsafe(CODE)
 
 // RETURN has everything it needs due to stack output of allocUnsafe()
 ret()  
+```
+
+### allocStack(input:number) 
+
+Consume and store the top N items from the stack into memory. This will push `[offset, length, ...]` of the memory stored to the stack.
+
+Defintion: `Action: [val1, ..., valN, ...], allocStack(input:number) => [offset, length, ...]`
+
+```javascript
+// Example that returns 3 words: 00..03, 00..02, 00..01
+push(1)
+push(2)
+push(3)
+allocStack(3)
+ret()
 ```
 
 ### jump(input:HexableValue)

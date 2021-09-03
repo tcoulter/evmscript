@@ -9,14 +9,15 @@ import {
   WordRange,
   ByteRange,
   Padded,
-  SolidityString
+  SolidityString,
+  SolidityTypes
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from ".";
 import Enc from "@root/encoding";
 import ensure from "./ensure";
 
-export type ActionFunction = (context:RuntimeContext, ...args: HexableValue[]) => void;
+export type ActionFunction = (context:RuntimeContext, ...args: Expression[]) => void;
 export type ExpressionFunction = (context:RuntimeContext, ...args: Expression[]) => HexableValue;
 export type ContextFunction = (context:RuntimeContext, ...args: Expression[]) => void;
 
@@ -98,6 +99,85 @@ function allocUnsafe(context:RuntimeContext, input:HexableValue) {
 
   context.tail.push(inputStart);                    // Add start label and input at the end of
   context.tail.push(input)                          // the bytecode.
+}
+
+function allocStack(context:RuntimeContext, amount:number) {
+  ensure(amount).isNumber()
+
+  for (var i = 0; i < amount; i++) {
+    Array.prototype.push.apply(context.intermediate, [
+      // Note: MSTORE gobbles up a value each time
+      Instruction.MSIZE,
+      Instruction.MSTORE
+    ])
+  }
+
+  push(context, amount * 32)
+  Array.prototype.push.apply(context.intermediate, [
+    // Calculate the start offset by length from the current free memory index
+    Instruction.DUP1,   
+    Instruction.MSIZE,
+    Instruction.SUB
+  ])
+}
+
+function pushCallDataOffsets(context:RuntimeContext, ...args:string[]) {
+  args.forEach((typeString) => ensure(typeString).isSolidityType());
+
+  // Loop through items placing ([value,...] | [offset, length, ...])
+  // on the stack in reverse order, so the first item is at the top of the stack.
+  // This ensures that you don't have to change code when new values are added later 
+
+  push(context, 4 + (32 * (args.length - 1))); // Start at the last item
+
+  args.reverse().forEach((typeString, index) => {
+    switch(typeString) {
+      case SolidityTypes.uint:
+        // uints are abi encoded simply by its value [uint value, ...]
+
+        Array.prototype.push.apply(context.intermediate, [
+          Instruction.DUP1,           // Copy the calldata offset
+          Instruction.CALLDATALOAD,   // Load the value of the uint
+          Instruction.SWAP1,          // Swap the value and the existing offset
+        ])
+        break;
+      case SolidityTypes.bytes: 
+        // bytes is abi encoded as [bytes calldata location, ..., bytes length, bytes data]
+        // where `bytes length` is located at the bytes calldata location.
+
+        // TODO: See if I can make this more efficent with less swapping
+        Array.prototype.push.apply(context.intermediate, [
+          Instruction.DUP1,           // Copy the calldata offset                           => [calldata offset, calldata offset, ...]
+          Instruction.CALLDATALOAD,   // Load the location of the bytes array in call data  => [location, calldata offset, ...]
+          Instruction.PUSH1,          // Add 4 to location to account for function id       => [location, calldata offset, ...]
+          0x4,
+          Instruction.ADD,
+          Instruction.SWAP1,          // Swap location and calldata offset                  => [calldata offset, location, ...]
+          Instruction.DUP2,           // Copy the location                                  => [location, calldata offset, location, ...]
+          Instruction.CALLDATALOAD,   // Use the location to load the length of the array   => [length, calldata offset, location, ...]
+          Instruction.SWAP2,          // Swap length and location                           => [location, calldata offset, length, ...]
+          Instruction.PUSH1,          // Add 32 to the location, giving the start of data   => [data start, calldata offset, length, ...]
+          0x20,
+          Instruction.ADD,
+          Instruction.SWAP1           // Finally, swap data start and calldata offset       => [calldata offset, data start, length, ...]
+                                      // leaving the existing offset at the top of the stack
+        ])
+        break;
+    }
+
+    if (index < args.length - 1) {
+      Array.prototype.push.apply(context.intermediate, [
+        Instruction.PUSH1,          // Subtract 32 from the offset, moving backwards to the next item
+        0x20, 
+        Instruction.SWAP1,
+        Instruction.SUB
+      ])
+    }
+
+  })
+
+  // Clean up the last calldata offset
+  context.intermediate.push(Instruction.POP);
 }
 
 function jump(context:RuntimeContext, input:HexableValue) {
@@ -213,6 +293,7 @@ function $pad(context:RuntimeContext, input:HexableValue, lengthInBytes:number, 
 
 export const actionFunctions:Record<string, ActionFunction> = {
   alloc,
+  allocStack,
   allocUnsafe,
   assertNonPayable,
   bail,
@@ -220,6 +301,7 @@ export const actionFunctions:Record<string, ActionFunction> = {
   jump,
   jumpi,
   push,
+  pushCallDataOffsets,
   revert
 }
 
