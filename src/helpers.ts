@@ -1,5 +1,5 @@
 import { ActionFunction, ContextFunction, ExpressionFunction } from "./actions";
-import {ActionPointer, ActionSource, ConcatedHexValue, Expression, Hexable, HexableValue, IntermediateRepresentation, LabelPointer, sanitize} from "./grammar";
+import {ActionPointer, ActionSource, Expression, Hexable, HexableValue, IntermediateRepresentation, sanitizeHexStrings} from "./grammar";
 import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from ".";
 
 export type UserFacingFunction = (...args: Expression[]) => Expression|ActionPointer;
@@ -32,7 +32,7 @@ export function createActionHandler(runtimeContext:RuntimeContext, key:string, f
 
     runtimeContext.intermediate.push(actionSource);
 
-    args = args.map((input:Expression) => sanitize(input, key));
+    args = args.map((input:Expression) => sanitizeHexStrings(input, key));
     fn.apply(null, [runtimeContext, ...args]); 
 
     return actionPointer;
@@ -45,7 +45,7 @@ export function createExpressionAndContextHandlers(runtimeContext:RuntimeContext
   // Note that Expression has the largest surface area of available types,
   // so it applies to all function types.
   let handler:UserFacingFunction = function(...args:Expression[]) {
-    args = args.map((input:Expression) => sanitize(input, key));
+    args = args.map((input:Expression) => sanitizeHexStrings(input, key));
     return fn.apply(null, [runtimeContext, ...args]);
   }
 

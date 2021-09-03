@@ -3,14 +3,15 @@
 
 import expect from "expect";
 import { Matchers } from "expect/build/types";
-import { Hexable, HexableValue, SolidityTypes } from "./grammar";
+import { ActionPointer, Hexable, HexableValue, LabelPointer, SolidityTypes } from "./grammar";
 import { byteLength } from "./helpers";
 
 interface ExtendedMatchers<R> extends Matchers<R> {
   isHexable(): R;
   is32BytesOrLess(): R;
   isSolidityType(): R;
-  isNumber(): R;
+  isOfType(type:string): R;
+  isPointer(): R;
 }
 
 expect.extend({
@@ -67,15 +68,29 @@ expect.extend({
     }
   },
 
-  isNumber(input:number) {
-    if (typeof input == "number") {
+  isOfType(input:number, type:string) {
+    if (typeof input == type) {
       return {
-        message: () => `Expected input not to be of type: number`,
+        message: () => `Expected input not to be of type: ${type}`,
         pass: true
       }
     } else {
       return {
-        message: () => `Expected input to be of type: number`,
+        message: () => `Expected input to be of type: ${type}`,
+        pass: false
+      }
+    }
+  },
+
+  isPointer(input:ActionPointer|LabelPointer) {
+    if (input instanceof ActionPointer || input instanceof LabelPointer) {
+      return {
+        message: () => `Expected input not to be a code pointer`,
+        pass: true
+      }
+    } else {
+      return {
+        message: () => `Expected input to be a code pointer`,
         pass: false
       }
     }

@@ -67,7 +67,7 @@ describe('Grammar', () => {
       )
     })
 
-    it("sets helfpul defaults when using WordRange, also padding if length out of bounds", () => {
+    it("sets helpful defaults when using WordRange, also padding if length out of bounds", () => {
       let largeHexData = BigInt("0xAA0102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1FAABBCCDDEEFF00112233445566778899");
     
       let wordRange = new WordRange(largeHexData, 1); // The second word

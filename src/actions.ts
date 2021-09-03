@@ -10,16 +10,21 @@ import {
   ByteRange,
   Padded,
   SolidityString,
-  SolidityTypes
+  SolidityTypes,
+  ActionPointer
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from ".";
 import Enc from "@root/encoding";
 import ensure from "./ensure";
+import { ethers } from "ethers";
+import expectExport from "expect";
 
 export type ActionFunction = (context:RuntimeContext, ...args: Expression[]) => void;
 export type ExpressionFunction = (context:RuntimeContext, ...args: Expression[]) => HexableValue;
 export type ContextFunction = (context:RuntimeContext, ...args: Expression[]) => void;
+
+export type DispatchRecord = Record<string, ActionPointer|LabelPointer>;
 
 function push(context:RuntimeContext, input:HexableValue) {
   ensure(input).isHexable()
@@ -102,7 +107,7 @@ function allocUnsafe(context:RuntimeContext, input:HexableValue) {
 }
 
 function allocStack(context:RuntimeContext, amount:number) {
-  ensure(amount).isNumber()
+  ensure(amount).isOfType("number")
 
   for (var i = 0; i < amount; i++) {
     Array.prototype.push.apply(context.intermediate, [
@@ -180,6 +185,35 @@ function pushCallDataOffsets(context:RuntimeContext, ...args:string[]) {
   context.intermediate.push(Instruction.POP);
 }
 
+function shr(context:RuntimeContext, input:HexableValue) {
+  if (typeof input != "undefined") {
+    push(context, input);
+  }
+  context.intermediate.push(Instruction.SHR);
+}
+
+function shl(context:RuntimeContext, input:HexableValue) {
+  if (typeof input != "undefined") {
+    push(context, input);
+  }
+  context.intermediate.push(Instruction.SHL);
+}
+
+function calldataload(context:RuntimeContext, offset:HexableValue, lengthInBytes:number = 32) {
+  if (typeof offset != "undefined") {
+    expectExport(lengthInBytes).toBeLessThanOrEqual(32);
+
+    push(context, offset)
+    context.intermediate.push(Instruction.CALLDATALOAD);
+
+    if (lengthInBytes != 32) {
+      shr(context, (32 - lengthInBytes) * 8)
+    }
+  } else {
+    context.intermediate.push(Instruction.CALLDATALOAD);
+  }
+}
+
 function jump(context:RuntimeContext, input:HexableValue) {
   if (typeof input != "undefined") {
     ensure(input).is32BytesOrLess();
@@ -194,6 +228,40 @@ function jumpi(context:RuntimeContext, input:HexableValue) {
     push(context, input);
   }
   context.intermediate.push(Instruction.JUMPI);
+}
+
+function dispatch(context:RuntimeContext, mapping:DispatchRecord) {
+  Object.keys(mapping).forEach((solidityFunction) => {
+    let pointer:ActionPointer|LabelPointer = mapping[solidityFunction];
+
+    ensure(solidityFunction).isOfType("string");
+    ensure(pointer).isPointer();
+
+    // Get rid of the "function " prefix because ethers doesn't like it.
+    let indexOfFunction = solidityFunction.indexOf("function ");
+
+    if (indexOfFunction == 0) {
+      solidityFunction = solidityFunction.substr(9)
+    }
+
+    let fragment = ethers.utils.FunctionFragment.from(solidityFunction);
+    let signature = fragment.format(ethers.utils.FormatTypes.sighash);
+    let signatureAsHex = "0x" + Enc.strToHex(signature)
+    let fourBytes = ethers.utils.keccak256(signatureAsHex).substr(0, 10) // 4 bytes + 0x prefix!
+
+    // Load the 4-byte sig from calldata onto the stack
+    // TODO: See if there's a way to not do this for each item
+    calldataload(context, 0, 4);
+
+    Array.prototype.push.apply(context.intermediate, [
+      Instruction.PUSH4,        // Push this function's 4-byte sig
+      BigInt(fourBytes),
+      Instruction.EQ,           // Check equality
+      Instruction.PUSH2,
+      pointer,              
+      Instruction.JUMPI         // Jump to our pointer if they match!
+    ])
+  })
 }
 
 function insert(context:RuntimeContext, ...args:HexableValue[]) {
@@ -297,11 +365,14 @@ export const actionFunctions:Record<string, ActionFunction> = {
   allocUnsafe,
   assertNonPayable,
   bail,
+  dispatch,
   insert,
   jump,
   jumpi,
   push,
   pushCallDataOffsets,
+  shl,
+  shr,
   revert
 }
 

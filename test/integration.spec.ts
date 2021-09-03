@@ -36,8 +36,8 @@ describe("Integration", () => {
   before(async function() {
     ganacheProvider = Ganache.provider();
     // Swap the providers here if you want to run tests against a local ganache
-    provider = new ethers.providers.Web3Provider(ganacheProvider)    
-    //provider = new ethers.providers.JsonRpcProvider();
+    //provider = new ethers.providers.Web3Provider(ganacheProvider)    
+    provider = new ethers.providers.JsonRpcProvider();
     await provider.ready;
 
     signer = provider.getSigner();
@@ -220,6 +220,50 @@ describe("Integration", () => {
     expect(value[0].toNumber()).toBe(5)     // For uint, we push the value
     expect(value[1].toNumber()).toBe(100)   // For bytes, we push [data offset, length, ...]
     expect(value[2].toNumber()).toBe(3)   
+  })
+
+  it("dispatches functions properly", async () => {
+    // I used the function name getLauncherTemplateId() because
+    // I found it within the 4-byte directory (a good oracle), and 
+    // it was something I could write in a test. 
+    // https://www.4byte.directory/signatures/
+
+    let code = `
+      $set("deployable", true)
+
+      // Note that I include the variable names here to show that they're
+      // properly ignored when calculating the 4-byte hash. Also, I prefix
+      // the input with the word "function", which ethers doesn't like, 
+      // simply so the user can copy and paste their signature.
+      dispatch({
+        "function getLauncherTemplateId(address _addr) returns (address _returnAddr)": $ptr("returnAddress")
+      })
+
+      // If it doesn't dispatch correctly, we'll return a bad value
+      push("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") // F, for failure
+      allocStack(1)
+      ret()
+
+      returnAddress = 
+        push("0x1234567890123456789012345678901234567890")
+        allocStack(1)
+        ret()
+    `
+
+    let bytecode = preprocess(code);
+
+    let tx = await signer.sendTransaction({data: bytecode})
+    let receipt = await provider.getTransactionReceipt(tx.hash);
+    expect(receipt.contractAddress).toBeDefined();
+
+    let contract = new ethers.Contract(receipt.contractAddress, [
+      "function getLauncherTemplateId(address) public returns(address)"
+    ], signer);
+
+    // Input to this function doesn't matter for the test.
+    let value:ethers.BigNumber = await contract.callStatic.getLauncherTemplateId("0x1111222233334444555566667777888899990000"); 
+
+    expect(value.toString()).toBe("0x1234567890123456789012345678901234567890");
   })
 
 })

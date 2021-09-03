@@ -330,6 +330,30 @@ mainloop =
 stop()
 ```
 
+### dispatch(mapping:Record<solidityFunctionSignature, pointerObject>)
+
+Evaluate the function signature passed within the call data (the first four bytes) and if that value matches a function within the record, jump to the pointer associated with with that function.
+
+This is best shown by example, so see below. That said, `solidityFunctionSignature` is string representation of the function, and `pointerObject` is the return value of `$ptr()`. 
+
+Note that `dispatch()` will not revert if the signature found in calldata doesn't match one provided.
+
+Definition: `Action: [], dispatch(mapping:Record<solidityFunctionSignature, pointerObject>) => []`
+
+```javascript
+dispatch({
+  "setOwner(address)": $ptr("setOwner"),
+  "getOwner()": $ptr("getOwner")
+})
+
+setOwner = 
+  pushCallDataOffsets()
+  // do something...
+
+getOwner = 
+  // do something...
+```
+
 ### insert(input:HexableValue)
 
 This function directly inserts a arbitrary value into the code. It does not check if the inserted value is valid code. This is used under the hood within `allocUnsafe()`, and contains the same safety risks. Use with caution. 
@@ -392,15 +416,63 @@ Definitions:
 ```javascript
 assertNonPayable("Do not send Ether!");
 
-// With no reason string, assertNonPayable() is equivalent to: 
+// This is equivalent to: 
 
 callvalue()       // Jump to allgood if no Ether
 iszero()           
 jumpi($ptr("allgood"))   
-bail()           // Ether passed? Bail.           
+revert("Do not send Ether!")    // Ether passed? Revert!           
 
 allgood = 
   // ... continue onward
+
+```
+
+### shr(input:HexableValue) / shl(input:HexableValue)
+
+Both `shr()` and `shl()` are helpers for the right and left shift operations, respectively. When no value is passed they act like normal `SHR` and `SHL` instructions, consuming data from the stack. When a value is passed, the passed value is pushed to the stack and then used normally. 
+
+These function accept a value purely for readability and reducing lines of code. 
+
+Definitions: 
+- `Action: [shift amount, value, ...] shr() / shl() => [shifted value, ...]`
+- `Action: [value, ...] shr(input:HexableValue) / shl(input:HexableValue) => [shifted value, ...]`
+
+```javascript
+// The following are equivalent
+
+// 1. Normal SHR
+push(1)   // value
+push(8)   // shift by 1 byte (8 bits)
+shr()
+
+// 2. Helper version
+push(1)   // value
+shr(8)    // shift by 1 byte (8 bits)
+```
+
+### calldataload(offset:HexableValue, length:number = 32)
+
+This is a helper function for loading specific data from calldata. When no value for `offset` is passed, this function acts like a normal `CALLDATALOAD` instruction. However, when `offset` is passed, `calldataload()` will load 32 bytes of data from calldata starting at the passed offset. When length is set and is less than 32, this function will shift the loaded data to include only the bytes from `offset` to `offset + length`. The resultant data is left padded. See example. 
+
+Definition: 
+- `Action: [offset], calldataload() => [msg.data[offset]..msg.data[offset+32], ...]`
+- `Action: [], calldataload(offset) => [msg.data[offset]..msg.data[offset+32]]`
+- `Action: [], calldataload(offset, length) => [msg.data[offset]..msg.data[offset+length]]`
+
+```javascript
+// Load the solidity 4-byte function signature (note length of 4)
+calldataload(0, 4)
+
+// Stack:
+// 0: 00000000...1b22f9c5 (top) 
+
+// Know there's a uint as the first param? Load it yourself
+calldataload(4)
+
+// Stack now: 
+// 0: 00000000...00000005 (top)
+// 1: 00000000...1b22f9c5         // Function signature previously loaded
 
 ```
 

@@ -179,7 +179,7 @@ export abstract class Hexable {
 
 export type HexLiteral = BigInt;
 export type HexableValue = Hexable|HexLiteral|Instruction;
-export type Expression = HexableValue|ConfigKeys|number|boolean|string; 
+export type Expression = HexableValue|ConfigKeys|number|boolean|string|object; 
 
 export type IntermediateRepresentation = ActionSource|HexableValue;
 
@@ -402,21 +402,10 @@ export class JumpMap extends Hexable {
   }
 }
 
-export function sanitize(input:Expression|HexableValue, functionName:string):Expression {
-  if (typeof input == "string") {
-    if (input.indexOf("0x") == 0) {
-      return BigInt(input);
-    } else {
-      return input;
-    }
+export function sanitizeHexStrings(input:Expression|HexableValue, functionName:string):Expression {
+  if (typeof input == "string" && input.indexOf("0x") == 0) {
+    return BigInt(input);
   }
 
-  if (input instanceof Hexable 
-    || typeof input == "number"
-    || typeof input == "bigint" 
-    || typeof input == "boolean") {
-    return input;
-  }
-
-  throw new Error("Function " + functionName + "() cannot accept value of: " + input + ". If you're jumping to a named code location with jump(), use jump($ptr('name')).");
+  return input;
 }
