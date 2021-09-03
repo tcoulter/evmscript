@@ -86,7 +86,7 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     })
     .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
  
-  // Translate all internalFunctionPrefix'd keys to having the underscore removed, by adding
+  // Translate all internalFunctionPrefix'd keys to having the prefix removed, by adding
   // a preamble to the code. This ensures the user will receive an error if they
   // accidentally define a function of the same name. 
   let preamble = "";
