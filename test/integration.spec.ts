@@ -36,8 +36,8 @@ describe("Integration", () => {
   before(async function() {
     ganacheProvider = Ganache.provider();
     // Swap the providers here if you want to run tests against a local ganache
-    //provider = new ethers.providers.Web3Provider(ganacheProvider)    
-    provider = new ethers.providers.JsonRpcProvider();
+    provider = new ethers.providers.Web3Provider(ganacheProvider)    
+    //provider = new ethers.providers.JsonRpcProvider();
     await provider.ready;
 
     signer = provider.getSigner();

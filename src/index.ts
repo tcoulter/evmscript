@@ -3,24 +3,36 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { ExpressionFunction, actionFunctions, expressionFunctions, contextFunctions, ContextFunction } from "./actions";
-import { Instruction,IntermediateRepresentation, ActionPointer, ActionSource } from "./grammar";
-import { byteLength, createActionHandler, createExpressionAndContextHandlers, translateToBytecode, UserFacingFunction } from './helpers';
+import { ActionPointer, StackReference, Action, Instruction } from "./grammar";
+import { byteLength, createActionHandler, createContextHandler, createExpressionAndContextHandlers, createExpressionHandler, translateToBytecode, UserFacingFunction } from './helpers';
 
 export class RuntimeContext {
   deployable: boolean = false;
-  intermediate: IntermediateRepresentation[] = [];
-  tail: IntermediateRepresentation[] = [];
-  actionIndex: number = -1;
+  actions: Action[] = [];
+  tail: Action[] = [];
+  stack: Array<StackReference> = [];
 
-  getActionSource(isJumpDestination = false) {
-    this.actionIndex += 1;
-    let actionSource = new ActionSource(this.actionIndex);
+  pushAction(action:Action) {
+    action.intermediate
+      .filter((item) => item instanceof Instruction)
+      .forEach((instruction:Instruction) => {
+        let [removed, added] = instruction.stackDelta();
 
-    if (isJumpDestination) {
-      actionSource.setIsJumpDestination()
-    }
+        // Use Array here to do something N times as a one-liner
+        [...Array(removed)].forEach(() => this.stack.pop());
+        [...Array(added)].forEach(() => this.stack.push(new StackReference()));
+      
+        // TODO: Manage swaps.
+      })
 
-    return actionSource;
+    action.stack = [...this.stack];
+
+    this.actions.push(action);
+  }
+
+  pushTailAction(action:Action) {
+    // We'll do processing later! 
+    this.tail.push(action);
   }
 }
 
@@ -38,11 +50,6 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     ...extraContext 
   }
 
-  let nonActionFunctions:Record<string, ExpressionFunction|ContextFunction> = {
-    ...expressionFunctions,
-    ...contextFunctions
-  }
-
   // Create a prefix for internal functions so there's no collision.
   // As you can tell, we're not messing around. We declare action functions, etc.,
   // as internal functions within the codeContext, so that we can declare
@@ -55,9 +62,14 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     .map<[string, UserFacingFunction]>((key) => [key, createActionHandler(runtimeContext, key, actionFunctions[key])])
     .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
 
-  Object.keys(nonActionFunctions)
-    .filter((key) => typeof nonActionFunctions[key] == "function")
-    .map<[string, UserFacingFunction]>((key) => [key, createExpressionAndContextHandlers(runtimeContext, key, nonActionFunctions[key])])
+  Object.keys(expressionFunctions)
+    .filter((key) => typeof expressionFunctions[key] == "function")
+    .map<[string, UserFacingFunction]>((key) => [key, createExpressionHandler(key, expressionFunctions[key])])
+    .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
+
+  Object.keys(contextFunctions)
+    .filter((key) => typeof contextFunctions[key] == "function")
+    .map<[string, UserFacingFunction]>((key) => [key, createContextHandler(runtimeContext, key, contextFunctions[key])])
     .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
   
   // Add default functions for instructions without set functions
@@ -80,7 +92,7 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
       return [
         lowercaseKey,
         createActionHandler(runtimeContext, lowercaseKey, () => {
-          runtimeContext.intermediate.push(Instruction[key]);
+          runtimeContext.actions.push(Instruction[key]);
         })
       ]
     })
@@ -128,7 +140,7 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
   } 
 
   // After processing, concatenate the intermediate representation and tail data
-  runtimeContext.intermediate = [...runtimeContext.intermediate, ...runtimeContext.tail];
+  runtimeContext.actions = [...runtimeContext.actions, ...runtimeContext.tail];
   runtimeContext.tail = [] // for good measure
 
   // Note: After execution, node can set values of any type to the context,
@@ -143,13 +155,13 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     .filter((key) => executedCodeContext[key] instanceof ActionPointer)
     .filter((key) => key.indexOf("_") != 0)
     .map<ActionPointer>((key) => executedCodeContext[key])
-    .forEach((actionPointer) => actionPointer.actionSource.setIsJumpDestination())
+    .forEach((actionPointer) => actionPointer.action.setIsJumpDestination())
 
   // 1. Compute the byte lengths of each item in the intermediate representation
   // 2. Sum result to determine the total bytes at each index
   // 3. Create a record of ActionSource indeces -> total bytes, as this represents the jump destination 
   let codeLocations:ActionIndexToCodeLocation = {};
-  let byteLengths = runtimeContext.intermediate
+  let byteLengths = runtimeContext.actions
     .map((item) => byteLength(item))
 
   let sum = 0; 
@@ -159,21 +171,21 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
       return sum;
     }) 
     .forEach((totalBytes, index) => {
-      let item = runtimeContext.intermediate[index];
+      let item = runtimeContext.actions[index];
 
-      if (!(item instanceof ActionSource)) {
+      if (!(item instanceof Action)) {
         return;
       }
 
       // Don't include the current byte length as that'll point to the following byte! 
-      codeLocations[item.actionIndex] = BigInt(totalBytes - byteLengths[index]);
+      codeLocations[item.id] = BigInt(totalBytes - byteLengths[index]);
     })
 
   // Now loop through the intermediate representation translating
   // action pointers and label pointers to their final values.
   let bytecode = [];
 
-  runtimeContext.intermediate.forEach((item) => {
+  runtimeContext.actions.forEach((item) => {
     let translation = translateToBytecode(item, executedCodeContext, codeLocations);
 
     if (translation) {

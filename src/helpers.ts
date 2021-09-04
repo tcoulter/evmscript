@@ -1,9 +1,8 @@
 import { ActionFunction, actionFunctions, ContextFunction, ExpressionFunction } from "./actions";
-import {ActionPointer, ActionSource, Expression, Hexable, HexableValue, Instruction, IntermediateRepresentation, sanitizeHexStrings} from "./grammar";
-import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from ".";
+import {Action, ActionPointer, Expression, Hexable, HexableValue, Instruction, IntermediateRepresentation, sanitizeHexStrings} from "./grammar";
+import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from "./index";
 
 export type UserFacingFunction = (...args: Expression[]) => Expression|ActionPointer;
-
 
 export const POINTER_BYTE_LENGTH = 2;
 
@@ -22,26 +21,43 @@ export function byteLength(input:IntermediateRepresentation):number {
     return Math.floor(length / 2) + (length % 2);
   }
 
+  console.log("unknown", input)
+
   throw new Error("Unknown input to byteLength(): " + input);
 }
 
 export function createActionHandler(runtimeContext:RuntimeContext, key:string, fn:ActionFunction):UserFacingFunction {
   let handler:UserFacingFunction = function(...args:Expression[]) {
-    let actionSource:ActionSource = runtimeContext.getActionSource();
-    let actionPointer:ActionPointer = actionSource.getPointer();
-
-    runtimeContext.intermediate.push(actionSource);
+    let mainAction = new Action();
+    let mainActionPointer = mainAction.getPointer();
 
     args = args.map((input:Expression) => sanitizeHexStrings(input, key));
-    fn.apply(null, [runtimeContext, ...args]); 
+    let otherActions:Action[] = fn.apply(null, [runtimeContext, mainAction.intermediate, ...args]) || []; 
 
-    return actionPointer;
+    runtimeContext.pushAction(mainAction);
+    otherActions.forEach((action) => {
+      runtimeContext.pushAction(action);
+    });
+  
+    return mainActionPointer;
   }
 
   return handler;
 }
 
-export function createExpressionAndContextHandlers(runtimeContext:RuntimeContext, key:string, fn:ExpressionFunction|ContextFunction):UserFacingFunction {
+export function createExpressionHandler(key:string, fn:ExpressionFunction):UserFacingFunction {
+  // Note that Expression has the largest surface area of available types,
+  // so it applies to all function types.
+  let handler:UserFacingFunction = function(...args:Expression[]) {
+    args = args.map((input:Expression) => sanitizeHexStrings(input, key));
+    return fn.apply(null, [...args]);
+  }
+
+  return handler;
+}
+
+
+export function createContextHandler(runtimeContext:RuntimeContext, key:string, fn:ContextFunction):UserFacingFunction {
   // Note that Expression has the largest surface area of available types,
   // so it applies to all function types.
   let handler:UserFacingFunction = function(...args:Expression[]) {
@@ -53,14 +69,14 @@ export function createExpressionAndContextHandlers(runtimeContext:RuntimeContext
 }
 
 export function createShorthandAction(instruction:Instruction, swapBeforeInstruction:boolean = false) {
-  return function(context:RuntimeContext, input:HexableValue) {
+  return function(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
     if (typeof input != "undefined") {
-      actionFunctions.push(context, input);
+      actionFunctions.push(context, intermediate, input);
       if (swapBeforeInstruction) {
-        context.intermediate.push(Instruction.SWAP1);
+        intermediate.push(Instruction.SWAP1);
       }
     }
-    context.intermediate.push(instruction);
+    intermediate.push(instruction);
   }
 }
 

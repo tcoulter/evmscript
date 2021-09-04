@@ -1,6 +1,5 @@
 // See https://ethervm.io/ for opcode reference
-import { 
-  Instruction, 
+import {  
   LabelPointer, 
   HexableValue,
   Expression,
@@ -11,34 +10,37 @@ import {
   Padded,
   SolidityString,
   SolidityTypes,
-  ActionPointer
+  ActionPointer,
+  IntermediateRepresentation,
+  Action,
+  Instruction
 } from "./grammar";
 import { byteLength, createShorthandAction } from "./helpers";
-import { RuntimeContext } from ".";
+import { RuntimeContext } from "./index";
 import Enc from "@root/encoding";
 import ensure from "./ensure";
 import { ethers } from "ethers";
 import expectExport from "expect";
 
-export type ActionFunction = (context:RuntimeContext, ...args: Expression[]) => void;
-export type ExpressionFunction = (context:RuntimeContext, ...args: Expression[]) => HexableValue;
+export type ActionFunction = (context:RuntimeContext, intermediate:IntermediateRepresentation[], ...args: Expression[]) => Action[]|void;
+export type ExpressionFunction = (...args: Expression[]) => HexableValue;
 export type ContextFunction = (context:RuntimeContext, ...args: Expression[]) => void;
 
 export type DispatchRecord = Record<string, ActionPointer|LabelPointer>;
 
-function push(context:RuntimeContext, input:HexableValue) {
+function push(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
   ensure(input).isHexable()
   ensure(input).is32BytesOrLess();
 
-  Array.prototype.push.apply(context.intermediate, [
+  intermediate.push(
     Instruction["PUSH" + byteLength(input)],
     input
-  ])
+  )
 }
 
 // Create actions for all the push functions, translating to the generalized push function
 let specificPushFunctions:Array<ActionFunction> =  Array.from(Array(32).keys()).map((index) => {
-  return function(context:RuntimeContext, input:HexableValue) {
+  return function(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
     // Since the byte length was requested specifically, lets make
     // the user passed the right amount of bytes.
     let expectedByteLength = index + 1;
@@ -48,36 +50,36 @@ let specificPushFunctions:Array<ActionFunction> =  Array.from(Array(32).keys()).
       throw new Error(`Function push${expectedByteLength}() expected ${expectedByteLength} bytes but received ${actualByteLength}.`);
     }
 
-    Array.prototype.push.apply(context.intermediate, [
+    intermediate.push(
       Instruction["PUSH" + (index + 1)],
       input
-    ])
+    )
   }
 })
 
 // push input to stack in word by word and load into memory 
-function alloc(context:RuntimeContext, input:HexableValue) {
+function alloc(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
   let length = byteLength(input);
   let wordIndex = 0;
 
   // Leave [offset, length,...] at the top of the stack
-  push(context, length /*+ (32 - (length % 32))*/)
-  context.intermediate.push(Instruction.MSIZE)                                    
+  push(context, intermediate, length)
+  intermediate.push(Instruction.MSIZE)                                    
 
   do {
     // If we don't have a full word, use a byte range and shift
     // the data into position. This allows us to deploy less bytecode.
     let bytesLeft = length - (wordIndex * 32);
     if (bytesLeft < 32) {
-      push(context, new ByteRange(input, wordIndex * 32, bytesLeft)) // Only push what we need
-      push(context, (32 - bytesLeft) * 8)                            // Then shift left what's left (bitwise shift)
-      context.intermediate.push(Instruction.SHL);
+      push(context, intermediate, new ByteRange(input, wordIndex * 32, bytesLeft)) // Only push what we need
+      push(context, intermediate, (32 - bytesLeft) * 8)                            // Then shift left what's left (bitwise shift)
+      intermediate.push(Instruction.SHL);
     } else {
-      push(context, new WordRange(input, wordIndex));   // Push 1 word to stack
+      push(context, intermediate, new WordRange(input, wordIndex));   // Push 1 word to stack
     }
     
-    context.intermediate.push(Instruction.MSIZE)      // Get the latest free memory offset
-    context.intermediate.push(Instruction.MSTORE)     // Store word in memory
+    intermediate.push(Instruction.MSIZE)      // Get the latest free memory offset
+    intermediate.push(Instruction.MSTORE)     // Store word in memory
 
     wordIndex += 1;
   } while(wordIndex * 32 < length)
@@ -86,72 +88,74 @@ function alloc(context:RuntimeContext, input:HexableValue) {
 // Like alloc, but uses CODECOPY to load into memory. 
 // Costs less gas, but could potentially insert JUMPDEST's that 
 // could be jumped to accidentally/maliciously. 
-function allocUnsafe(context:RuntimeContext, input:HexableValue) {
+function allocUnsafe(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
   let length = byteLength(input);
 
-  let inputStart = context.getActionSource();
+  let inputStart = new Action();
   let inputStartPtr = inputStart.getPointer();
 
-  push(context, length);                            // Push the byte length of the input
-  context.intermediate.push(Instruction.MSIZE);     // Get a free memory pointer       
+  push(context, intermediate, length);                            // Push the byte length of the input
+  intermediate.push(Instruction.MSIZE);     // Get a free memory pointer       
   
-  context.intermediate.push(Instruction.DUP2);      // Make a copy of the length   
-  push(context, inputStartPtr);    // Push the offset of the code where _codeptr__ is stored
-  context.intermediate.push(Instruction.DUP3);      // Copy the free memory pointer from above
-  context.intermediate.push(Instruction.CODECOPY)   // Copy code into memory     
+  intermediate.push(Instruction.DUP2);      // Make a copy of the length   
+  push(context, intermediate, inputStartPtr);    // Push the offset of the code where _codeptr__ is stored
+  intermediate.push(Instruction.DUP3);      // Copy the free memory pointer from above
+  intermediate.push(Instruction.CODECOPY)   // Copy code into memory     
 
   //// Just tail things below:
 
-  context.tail.push(inputStart);                    // Add start label and input at the end of
-  context.tail.push(input)                          // the bytecode.
+  // Add input at the end of the bytecode, as an action
+  // (so it can be pointed to in the code above.)
+  inputStart.intermediate.push(input)
+  context.pushTailAction(inputStart)
 }
 
-function allocStack(context:RuntimeContext, amount:number) {
+function allocStack(context:RuntimeContext, intermediate:IntermediateRepresentation[], amount:number) {
   ensure(amount).isOfType("number")
 
   for (var i = 0; i < amount; i++) {
-    Array.prototype.push.apply(context.intermediate, [
+    intermediate.push(
       // Note: MSTORE gobbles up a value each time
       Instruction.MSIZE,
       Instruction.MSTORE
-    ])
+    )
   }
 
-  push(context, amount * 32)
-  Array.prototype.push.apply(context.intermediate, [
+  push(context, intermediate, amount * 32)
+  intermediate.push(
     // Calculate the start offset by length from the current free memory index
     Instruction.DUP1,   
     Instruction.MSIZE,
     Instruction.SUB
-  ])
+  )
 }
 
-function pushCallDataOffsets(context:RuntimeContext, ...args:string[]) {
+function pushCallDataOffsets(context:RuntimeContext, intermediate:IntermediateRepresentation[], ...args:string[]) {
   args.forEach((typeString) => ensure(typeString).isSolidityType());
 
   // Loop through items placing ([value,...] | [offset, length, ...])
   // on the stack in reverse order, so the first item is at the top of the stack.
   // This ensures that you don't have to change code when new values are added later 
 
-  push(context, 4 + (32 * (args.length - 1))); // Start at the last item
+  push(context, intermediate, 4 + (32 * (args.length - 1))); // Start at the last item
 
   args.reverse().forEach((typeString, index) => {
     switch(typeString) {
       case SolidityTypes.uint:
         // uints are abi encoded simply by its value [uint value, ...]
 
-        Array.prototype.push.apply(context.intermediate, [
+        intermediate.push(
           Instruction.DUP1,           // Copy the calldata offset
           Instruction.CALLDATALOAD,   // Load the value of the uint
           Instruction.SWAP1,          // Swap the value and the existing offset
-        ])
+        )
         break;
       case SolidityTypes.bytes: 
         // bytes is abi encoded as [bytes calldata location, ..., bytes length, bytes data]
         // where `bytes length` is located at the bytes calldata location.
 
         // TODO: See if I can make this more efficent with less swapping
-        Array.prototype.push.apply(context.intermediate, [
+        intermediate.push(
           Instruction.DUP1,           // Copy the calldata offset                           => [calldata offset, calldata offset, ...]
           Instruction.CALLDATALOAD,   // Load the location of the bytes array in call data  => [location, calldata offset, ...]
           Instruction.PUSH1,          // Add 4 to location to account for function id       => [location, calldata offset, ...]
@@ -166,57 +170,57 @@ function pushCallDataOffsets(context:RuntimeContext, ...args:string[]) {
           Instruction.ADD,
           Instruction.SWAP1           // Finally, swap data start and calldata offset       => [calldata offset, data start, length, ...]
                                       // leaving the existing offset at the top of the stack
-        ])
+        )
         break;
     }
 
     if (index < args.length - 1) {
-      Array.prototype.push.apply(context.intermediate, [
+      intermediate.push(
         Instruction.PUSH1,          // Subtract 32 from the offset, moving backwards to the next item
         0x20, 
         Instruction.SWAP1,
         Instruction.SUB
-      ])
+      )
     }
 
   })
 
   // Clean up the last calldata offset
-  context.intermediate.push(Instruction.POP);
+  intermediate.push(Instruction.POP);
 }
 
-function calldataload(context:RuntimeContext, offset:HexableValue, lengthInBytes:number = 32) {
+function calldataload(context:RuntimeContext, intermediate:IntermediateRepresentation[], offset:HexableValue, lengthInBytes:number = 32) {
   if (typeof offset != "undefined") {
     expectExport(lengthInBytes).toBeLessThanOrEqual(32);
 
-    push(context, offset)
-    context.intermediate.push(Instruction.CALLDATALOAD);
+    push(context, intermediate, offset)
+    intermediate.push(Instruction.CALLDATALOAD);
 
     if (lengthInBytes != 32) {
-      shr(context, (32 - lengthInBytes) * 8)
+      shr(context, intermediate, (32 - lengthInBytes) * 8)
     }
   } else {
-    context.intermediate.push(Instruction.CALLDATALOAD);
+    intermediate.push(Instruction.CALLDATALOAD);
   }
 }
 
-function jump(context:RuntimeContext, input:HexableValue) {
+function jump(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
   if (typeof input != "undefined") {
     ensure(input).is32BytesOrLess();
-    push(context, input);
+    push(context, intermediate, input);
   }
-  context.intermediate.push(Instruction.JUMP);
+  intermediate.push(Instruction.JUMP);
 }
 
-function jumpi(context:RuntimeContext, input:HexableValue) {
+function jumpi(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
   if (typeof input != "undefined") {
     ensure(input).is32BytesOrLess();
-    push(context, input);
+    push(context, intermediate, input);
   }
-  context.intermediate.push(Instruction.JUMPI);
+  intermediate.push(Instruction.JUMPI);
 }
 
-function dispatch(context:RuntimeContext, mapping:DispatchRecord) {
+function dispatch(context:RuntimeContext, intermediate:IntermediateRepresentation[], mapping:DispatchRecord) {
   Object.keys(mapping).forEach((solidityFunction) => {
     let pointer:ActionPointer|LabelPointer = mapping[solidityFunction];
 
@@ -237,69 +241,66 @@ function dispatch(context:RuntimeContext, mapping:DispatchRecord) {
 
     // Load the 4-byte sig from calldata onto the stack
     // TODO: See if there's a way to not do this for each item
-    calldataload(context, 0, 4);
+    calldataload(context, intermediate, 0, 4);
 
-    Array.prototype.push.apply(context.intermediate, [
+    intermediate.push(
       Instruction.PUSH4,        // Push this function's 4-byte sig
       BigInt(fourBytes),
       Instruction.EQ,           // Check equality
       Instruction.PUSH2,
       pointer,              
       Instruction.JUMPI         // Jump to our pointer if they match!
-    ])
+    )
   })
 }
 
-function insert(context:RuntimeContext, ...args:HexableValue[]) {
-  Array.prototype.push.apply(context.intermediate, args);
+function insert(context:RuntimeContext, intermediate:IntermediateRepresentation[], ...args:HexableValue[]) {
+  intermediate.push(...args);
 }
 
-function revert(context:RuntimeContext, input:HexableValue) {
+function revert(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
   if (typeof input != "undefined") {
     // TODO: Replace this with ABI encoding helpers
     // Spec here: https://docs.soliditylang.org/en/v0.8.7/abi-spec.html#examples
-    alloc(context, new ConcatedHexValue(
+    alloc(context, intermediate, new ConcatedHexValue(
       0x08c379a0,                     // Triggers "revert reason"
       new Padded(0x20, 32),           // Part of ABI encoding: it says that the data starts at the next word
       new SolidityString(input)
     ));
   } 
-  context.intermediate.push(Instruction.REVERT);
+  intermediate.push(Instruction.REVERT);
 }
 
-function assertNonPayable(context:RuntimeContext, input:HexableValue) {
-  let skipRevert = context.getActionSource(true);
+function assertNonPayable(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
+  let skipRevert = new Action(true);
   let skipRevertPtr = skipRevert.getPointer();
 
-  Array.prototype.push.apply(context.intermediate, [
+  intermediate.push(
     Instruction.CALLVALUE,
     Instruction.ISZERO,
     Instruction.PUSH2,
     skipRevertPtr,
     Instruction.JUMPI
-  ])
+  )
 
   if (typeof input == "undefined") {
-    bail(context);
+    bail(context, intermediate);
   } else {
-    revert(context, input);
+    revert(context, intermediate, input);
   }
 
-  context.intermediate.push(skipRevert);
+  return [skipRevert];
 }
 
 // Revert with no message
-function bail(context:RuntimeContext) {
-  Array.prototype.push.apply(context.intermediate, [
+function bail(context:RuntimeContext, intermediate:IntermediateRepresentation[]) {
+  intermediate.push(
     Instruction.PUSH1,
     BigInt(0x0),
     Instruction.DUP1,
     Instruction.REVERT
-  ]);
+  );
 }
-
-
-
 
 const add = createShorthandAction(Instruction.ADD);
 const mul = createShorthandAction(Instruction.MUL);
@@ -333,23 +334,23 @@ function $set(context:RuntimeContext, key:string, value:string) {
   context[key.toString().trim()] = value;
 }
 
-function $ptr(context:RuntimeContext, labelName:string) {
+function $ptr(labelName:string) {
   return new LabelPointer(labelName);
 }
 
-function $concat(context:RuntimeContext, ...args:HexableValue[]) {
+function $concat(...args:HexableValue[]) {
   return new ConcatedHexValue(...args);
 }
 
-function $jumpmap(context:RuntimeContext, ...args:string[]) {
+function $jumpmap(...args:string[]) {
   return new JumpMap(...args);
 }
 
-function $bytelen(context:RuntimeContext, input:HexableValue) {
+function $bytelen(input:HexableValue) {
   return byteLength(input);
 }
 
-function $hex(context:RuntimeContext, input:HexableValue) {
+function $hex(input:HexableValue) {
   if (typeof input != "string") {
     throw new Error("Function $hex() can only be used on string literals.")
   }
@@ -357,7 +358,7 @@ function $hex(context:RuntimeContext, input:HexableValue) {
   return BigInt("0x" + Enc.strToHex(input));
 }
 
-function $pad(context:RuntimeContext, input:HexableValue, lengthInBytes:number, side:("left"|"right") = "left") {
+function $pad(input:HexableValue, lengthInBytes:number, side:("left"|"right") = "left") {
   return new Padded(input, lengthInBytes, side);
 }
 

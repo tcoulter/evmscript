@@ -1,165 +1,194 @@
-import { number, string } from "yargs";
 import { byteLength, leftPad, POINTER_BYTE_LENGTH, rightPad, translateToBytecode } from "./helpers";
-import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from ".";
+import { ActionIndexToCodeLocation, ExecutedCodeContext } from "./index";
 
-export enum Instruction {
-  STOP = 0x00,
+export type StackDelta = [number, number];
 
-  ADD = 0x01,
-  MUL = 0x02,
-  SUB = 0x03,
-  DIV = 0x04,
-  SDIV = 0x05,
-  MOD = 0x06,
-  SMOD = 0x07,
-  ADDMOD = 0x08,
-  MULMOD = 0x09,
-  EXP = 0x0A,
-  SIGNEXTEND = 0x0B,
+export abstract class Hexable {
+  abstract toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string;
+  abstract byteLength():number;
+}
 
-  LT = 0x10,
-  GT = 0x11,
-  SLT = 0x12,
-  SGT = 0x13,
-  EQ = 0x14,
-  ISZERO = 0x15,
-  AND = 0x16,
-  OR = 0x17,
-  XOR = 0x18,
-  NOT = 0x19,
+export class Instruction extends Hexable {
+  static STOP = new Instruction(0x00, 0, 0);
+  static ADD = new Instruction(0x01, 2, 1);
+  static MUL = new Instruction(0x02, 2, 1);
+  static SUB = new Instruction(0x03, 2, 1);
+  static DIV = new Instruction(0x04, 2, 1);
+  static SDIV = new Instruction(0x05, 2, 1);
+  static MOD = new Instruction(0x06, 2, 1);
+  static SMOD = new Instruction(0x07, 2, 1);
+  static ADDMOD = new Instruction(0x08, 3, 1);
+  static MULMOD = new Instruction(0x09, 3, 1);
+  static EXP = new Instruction(0x0A, 2, 1);
+  static SIGNEXTEND = new Instruction(0x0B, 2, 1);
 
-  BYTE = 0x1A,
+  static LT = new Instruction(0x10, 2, 1);
+  static GT = new Instruction(0x11, 2, 1);
+  static SLT = new Instruction(0x12, 2, 1);
+  static SGT = new Instruction(0x13, 2, 1);
+  static EQ = new Instruction(0x14, 2, 1);
+  static ISZERO = new Instruction(0x15, 1, 1);
+  static AND = new Instruction(0x16, 2, 1);
+  static OR = new Instruction(0x17, 2, 1);
+  static XOR = new Instruction(0x18, 2, 1);
+  static NOT = new Instruction(0x19, 1, 1);
 
-  SHL = 0x1B,
-  SHR = 0x1C,
-  SAR = 0x1D,
+  static BYTE = new Instruction(0x1A, 2, 1);
 
-  SHA3 = 0x20,
+  static SHL = new Instruction(0x1B, 2, 1);
+  static SHR = new Instruction(0x1C, 2, 1);
+  static SAR = new Instruction(0x1D, 2, 1);
 
-  ADDRESS = 0x30,
-  BALANCE = 0x31,
-  ORIGIN = 0x32,
-  CALLER = 0x33,
-  CALLVALUE = 0x34,
-  CALLDATALOAD = 0x35,
-  CALLDATASIZE = 0x36,
-  CALLDATACOPY = 0x37,
-  CODESIZE = 0x38,
-  CODECOPY = 0x39,
-  GASPRICE = 0x3A,
-  EXTCODESIZE = 0x3B,
-  EXTCODECOPY = 0x3C,
-  RETURNDATASIZE = 0x3D,
-  RETURNDATACOPY = 0x3E,
-  EXTCODEHASH = 0x3F,
-  BLOCKHASH = 0x40,
-  COINBASE = 0x41,
-  TIMESTAMP = 0x42,
-  NUMBER = 0x43,
-  DIFFICULTY = 0x44,
-  GASLIMIT = 0x45,
-  CHAINID = 0x46,
-  SELFBALANCE = 0x47,
-  BASEFEE = 0x48,
+  static SHA3 = new Instruction(0x20, 2, 1);
 
-  POP = 0x50,
-  MLOAD = 0x51,
-  MSTORE = 0x52,
-  MSTORE8 = 0x53,
-  SLOAD = 0x54,
-  SSTORE = 0x55,
-  JUMP = 0x56,
-  JUMPI = 0x57,
-  PC = 0x58,
-  MSIZE = 0x59,
-  GAS = 0x5A,
-  JUMPDEST = 0x5B,
+  static ADDRESS = new Instruction(0x30, 0, 1);
+  static BALANCE = new Instruction(0x31, 1, 1);
+  static ORIGIN = new Instruction(0x32, 0, 1);
+  static CALLER = new Instruction(0x33, 0, 1);
+  static CALLVALUE = new Instruction(0x34, 0, 1);
+  static CALLDATALOAD = new Instruction(0x35, 1, 1);
+  static CALLDATASIZE = new Instruction(0x36, 0, 1);
+  static CALLDATACOPY = new Instruction(0x37, 3, 0);
+  static CODESIZE = new Instruction(0x38, 0, 1);
+  static CODECOPY = new Instruction(0x39, 3, 0);
+  static GASPRICE = new Instruction(0x3A, 0, 1);
+  static EXTCODESIZE = new Instruction(0x3B, 1, 1);
+  static EXTCODECOPY = new Instruction(0x3C, 4, 0);
+  static RETURNDATASIZE = new Instruction(0x3D, 0, 1);
+  static RETURNDATACOPY = new Instruction(0x3E, 3, 0);
+  static EXTCODEHASH = new Instruction(0x3F, 1, 1);
+  static BLOCKHASH = new Instruction(0x40, 1, 1);
+  static COINBASE = new Instruction(0x41, 0, 1);
+  static TIMESTAMP = new Instruction(0x42, 0, 1);
+  static NUMBER = new Instruction(0x43, 0, 1);
+  static DIFFICULTY = new Instruction(0x44, 0, 1);
+  static GASLIMIT = new Instruction(0x45, 0, 1);
+  static CHAINID = new Instruction(0x46, 0, 1);
+  static SELFBALANCE = new Instruction(0x47, 0, 1);
+  static BASEFEE = new Instruction(0x48, 0, 1);
 
-  PUSH1 = 0x60,
-  PUSH2 = 0x61,
-  PUSH3 = 0x62,
-  PUSH4 = 0x63,
-  PUSH5 = 0x64,
-  PUSH6 = 0x65,
-  PUSH7 = 0x66,
-  PUSH8 = 0x67,
-  PUSH9 = 0x68,
-  PUSH10 = 0x69,
-  PUSH11 = 0x6A,
-  PUSH12 = 0x6B,
-  PUSH13 = 0x6C,
-  PUSH14 = 0x6D,
-  PUSH15 = 0x6E,
-  PUSH16 = 0x6F,
-  PUSH17 = 0x70,
-  PUSH18 = 0x71,
-  PUSH19 = 0x72,
-  PUSH20 = 0x73,
-  PUSH21 = 0x74,
-  PUSH22 = 0x75,
-  PUSH23 = 0x76,
-  PUSH24 = 0x77,
-  PUSH25 = 0x78,
-  PUSH26 = 0x79,
-  PUSH27 = 0x7A,
-  PUSH28 = 0x7B,
-  PUSH29 = 0x7C,
-  PUSH30 = 0x7D,
-  PUSH31 = 0x7E,
-  PUSH32 = 0x7F,
+  static POP = new Instruction(0x50, 1, 0);
+  static MLOAD = new Instruction(0x51, 1, 1);
+  static MSTORE = new Instruction(0x52, 2, 0);
+  static MSTORE8 = new Instruction(0x53, 2, 0);
+  static SLOAD = new Instruction(0x54, 1, 1);
+  static SSTORE = new Instruction(0x55, 2, 1);
+  static JUMP = new Instruction(0x56, 1, 0);
+  static JUMPI = new Instruction(0x57, 2, 0);
+  static PC = new Instruction(0x58, 0, 1);
+  static MSIZE = new Instruction(0x59, 0, 1);
+  static GAS = new Instruction(0x5A, 0, 1);
+  static JUMPDEST = new Instruction(0x5B, 0, 0);
 
-  DUP1 = 0x80,
-  DUP2 = 0x81,
-  DUP3 = 0x82,
-  DUP4 = 0x83,
-  DUP5 = 0x84,
-  DUP6 = 0x85,
-  DUP7 = 0x86,
-  DUP8 = 0x87,
-  DUP9 = 0x88,
-  DUP10 = 0x89,
-  DUP11 = 0x8A,
-  DUP12 = 0x8B,
-  DUP13 = 0x8C,
-  DUP14 = 0x8D,
-  DUP15 = 0x8E,
-  DUP16 = 0x8F,
+  static PUSH1 = new Instruction(0x60, 0, 1);
+  static PUSH2 = new Instruction(0x61, 0, 1);
+  static PUSH3 = new Instruction(0x62, 0, 1);
+  static PUSH4 = new Instruction(0x63, 0, 1);
+  static PUSH5 = new Instruction(0x64, 0, 1);
+  static PUSH6 = new Instruction(0x65, 0, 1);
+  static PUSH7 = new Instruction(0x66, 0, 1);
+  static PUSH8 = new Instruction(0x67, 0, 1);
+  static PUSH9 = new Instruction(0x68, 0, 1);
+  static PUSH10 = new Instruction(0x69, 0, 1);
+  static PUSH11 = new Instruction(0x6A, 0, 1);
+  static PUSH12 = new Instruction(0x6B, 0, 1);
+  static PUSH13 = new Instruction(0x6C, 0, 1);
+  static PUSH14 = new Instruction(0x6D, 0, 1);
+  static PUSH15 = new Instruction(0x6E, 0, 1);
+  static PUSH16 = new Instruction(0x6F, 0, 1);
+  static PUSH17 = new Instruction(0x70, 0, 1);
+  static PUSH18 = new Instruction(0x71, 0, 1);
+  static PUSH19 = new Instruction(0x72, 0, 1);
+  static PUSH20 = new Instruction(0x73, 0, 1);
+  static PUSH21 = new Instruction(0x74, 0, 1);
+  static PUSH22 = new Instruction(0x75, 0, 1);
+  static PUSH23 = new Instruction(0x76, 0, 1);
+  static PUSH24 = new Instruction(0x77, 0, 1);
+  static PUSH25 = new Instruction(0x78, 0, 1);
+  static PUSH26 = new Instruction(0x79, 0, 1);
+  static PUSH27 = new Instruction(0x7A, 0, 1);
+  static PUSH28 = new Instruction(0x7B, 0, 1);
+  static PUSH29 = new Instruction(0x7C, 0, 1);
+  static PUSH30 = new Instruction(0x7D, 0, 1);
+  static PUSH31 = new Instruction(0x7E, 0, 1);
+  static PUSH32 = new Instruction(0x7F, 0, 1);
 
-  SWAP1 = 0x90,
-  SWAP2 = 0x91,
-  SWAP3 = 0x92,
-  SWAP4 = 0x93,
-  SWAP5 = 0x94,
-  SWAP6 = 0x95,
-  SWAP7 = 0x96,
-  SWAP8 = 0x97,
-  SWAP9 = 0x98,
-  SWAP10 = 0x99,
-  SWAP11 = 0x9A,
-  SWAP12 = 0x9B,
-  SWAP13 = 0x9C,
-  SWAP14 = 0x9D,
-  SWAP15 = 0x9E,
-  SWAP16 = 0x9F,
+  static DUP1 = new Instruction(0x80, 0, 1);
+  static DUP2 = new Instruction(0x81, 0, 1);
+  static DUP3 = new Instruction(0x82, 0, 1);
+  static DUP4 = new Instruction(0x83, 0, 1);
+  static DUP5 = new Instruction(0x84, 0, 1);
+  static DUP6 = new Instruction(0x85, 0, 1);
+  static DUP7 = new Instruction(0x86, 0, 1);
+  static DUP8 = new Instruction(0x87, 0, 1);
+  static DUP9 = new Instruction(0x88, 0, 1);
+  static DUP10 = new Instruction(0x89, 0, 1);
+  static DUP11 = new Instruction(0x8A, 0, 1);
+  static DUP12 = new Instruction(0x8B, 0, 1);
+  static DUP13 = new Instruction(0x8C, 0, 1);
+  static DUP14 = new Instruction(0x8D, 0, 1);
+  static DUP15 = new Instruction(0x8E, 0, 1);
+  static DUP16 = new Instruction(0x8F, 0, 1);
+
+  static SWAP1 = new Instruction(0x90, 0, 0);
+  static SWAP2 = new Instruction(0x91, 0, 0);
+  static SWAP3 = new Instruction(0x92, 0, 0);
+  static SWAP4 = new Instruction(0x93, 0, 0);
+  static SWAP5 = new Instruction(0x94, 0, 0);
+  static SWAP6 = new Instruction(0x95, 0, 0);
+  static SWAP7 = new Instruction(0x96, 0, 0);
+  static SWAP8 = new Instruction(0x97, 0, 0);
+  static SWAP9 = new Instruction(0x98, 0, 0);
+  static SWAP10 = new Instruction(0x99, 0, 0);
+  static SWAP11 = new Instruction(0x9A, 0, 0);
+  static SWAP12 = new Instruction(0x9B, 0, 0);
+  static SWAP13 = new Instruction(0x9C, 0, 0);
+  static SWAP14 = new Instruction(0x9D, 0, 0);
+  static SWAP15 = new Instruction(0x9E, 0, 0);
+  static SWAP16 = new Instruction(0x9F, 0, 0);
   
-  LOG0 = 0xA0,
-  LOG1 = 0xA1,
-  LOG2 = 0xA2,
-  LOG3 = 0xA3,
-  LOG4 = 0xA4,
+  static LOG0 = new Instruction(0xA0, 2, 0);
+  static LOG1 = new Instruction(0xA1, 3, 0);
+  static LOG2 = new Instruction(0xA2, 4, 0);
+  static LOG3 = new Instruction(0xA3, 5, 0);
+  static LOG4 = new Instruction(0xA4, 6, 0);
 
-  CREATE = 0xF0,
-  CALL = 0xF1,
-  CALLCODE = 0xF2,
-  RETURN = 0xF3,
-  DELEGATECALL = 0xF4,
-  CREATE2 = 0xF5,
+  static CREATE = new Instruction(0xF0, 3, 1);
+  static CALL = new Instruction(0xF1, 7, 1);
+  static CALLCODE = new Instruction(0xF2, 7, 0);
+  static RETURN = new Instruction(0xF3, 2, 0);
+  static DELEGATECALL = new Instruction(0xF4, 6, 0);
+  static CREATE2 = new Instruction(0xF5, 4, 0);
 
-  STATICCALL = 0xFA,
+  static STATICCALL = new Instruction(0xFA, 6, 0);
 
-  REVERT = 0xFD,
+  static REVERT = new Instruction(0xFD, 2, 0);
 
-  SELFDESTRUCT = 0xFF
+  static SELFDESTRUCT = new Instruction(0xFF, 1, 0);
+
+
+  code:number;
+  stackRemoved:number;
+  stackAdded:number; 
+
+  constructor(code:number, stackRemoved:number = 0, stackAdded:number = 0) {
+    super()
+    this.code = code;
+    this.stackRemoved = stackRemoved;
+    this.stackAdded = stackAdded;
+  }
+
+  stackDelta():StackDelta {
+    return [this.stackRemoved, this.stackAdded];
+  }
+
+  byteLength() {
+    return 1;
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext={}, codeLocations:ActionIndexToCodeLocation={}) {
+    return BigInt(this.code).toString(16)
+  }
 }
 
 export enum SolidityTypes {
@@ -172,19 +201,90 @@ export enum ConfigKeys {
   deployable = "deployable"
 }
 
-export abstract class Hexable {
-  abstract toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string;
-  abstract byteLength():number;
-}
-
-export type HexLiteral = BigInt;
+export type HexLiteral = BigInt|number;
 export type HexableValue = Hexable|HexLiteral|Instruction;
 export type Expression = HexableValue|ConfigKeys|number|boolean|string|object; 
 
-export type IntermediateRepresentation = ActionSource|HexableValue;
+export type IntermediateRepresentation = HexableValue;
 
+export class StackReference {
+  static nextIndex = 0;
 
-// Mostly for typing.
+  id:number;
+
+  constructor() {
+    this.id = StackReference.nextIndex;
+    StackReference.nextIndex += 1;
+  }
+}
+
+// We're doing something *very* fancy here, all in the name
+// of syntactic sugar for users. This action is an array.
+// When a user writes [val1, val2, ...] = action, they'll
+// get stack references. 
+export class Action extends Hexable {
+  static nextId:number = 0;
+
+  id:number; 
+  intermediate: IntermediateRepresentation[] = [];
+  isJumpDestination:boolean = false;
+  stack:StackReference[] = [];
+
+  constructor(isJumpDestination:boolean = false) {
+    super();
+    this.isJumpDestination = isJumpDestination;
+    this.id = Action.nextId;
+    Action.nextId += 1;
+  }
+
+  setIsJumpDestination() {
+    this.isJumpDestination = true;
+  }
+
+  getStackDelta():StackDelta {
+    let totalRemoved = 0;
+    let totalAdded = 0;
+    
+    this.intermediate
+      .filter((item) => item instanceof Instruction)
+      .forEach((instruction:Instruction) => {
+        let [removed, added] = instruction.stackDelta();
+        totalRemoved += removed;
+        totalAdded += added;
+      })
+
+    return [totalRemoved, totalAdded];
+  }
+
+  getPointer() {
+    return new ActionPointer(this);
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string { 
+    let hex = this.intermediate
+      .map((item) => translateToBytecode(item, executedCodeContext, codeLocations))
+      .join("");
+
+    if (this.isJumpDestination) {
+      hex = Instruction.JUMPDEST.toHex() + hex;;
+    }
+
+    return hex;
+  }
+
+  byteLength() {
+    let length = this.intermediate
+      .map((item) => byteLength(item))
+      .reduce((a, b) => a + b, 0)
+
+    if (this.isJumpDestination) {
+      length += Instruction.JUMPDEST.byteLength();
+    }
+
+    return length;
+  }
+}
+
 export class LabelPointer extends Hexable {
   labelName = "";
 
@@ -208,17 +308,17 @@ export class LabelPointer extends Hexable {
   }
 }
 
-export class ActionPointer extends Hexable {
-  actionSource:ActionSource;
 
-  constructor(actionSource:ActionSource) {
+export class ActionPointer extends Hexable {
+  action:Action;
+  constructor(action:Action) {
     super();
-    this.actionSource = actionSource;
+    this.action = action;
   }
 
   toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string { 
     return leftPad(
-      codeLocations[this.actionSource.actionIndex].toString(16),
+      codeLocations[this.action.id].toString(16),
       POINTER_BYTE_LENGTH
     );
   }
@@ -226,35 +326,22 @@ export class ActionPointer extends Hexable {
   byteLength() {
     return POINTER_BYTE_LENGTH;
   }
-}
 
-export class ActionSource extends Hexable {
-  actionIndex = 0;
-  isJumpDestination = false;
+  [Symbol.iterator]() {
+    // Use a new index for each iterator. This makes multiple
+    // iterations over the iterable safe for non-trivial cases,
+    // such as use of break or nested looping over the same iterable.
+    let index = 0;
 
-  constructor(actionIndex:number) {
-    super();
-    this.actionIndex = actionIndex;
-  }
-
-  getPointer() {
-    return new ActionPointer(this);
-  }
-
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string { 
-    if (this.isJumpDestination) {
-      return translateToBytecode(Instruction.JUMPDEST, executedCodeContext, codeLocations);
+    return {
+      next: () => {
+        if (index < this.action.stack.length) {
+          return {value: this.action.stack[index++], done: false}
+        } else {
+          return {done: true}
+        }
+      }
     }
-
-    return "";
-  }
-
-  byteLength() {
-    return this.isJumpDestination ? 1 /*JUMPDEST*/ : 0; 
-  }
-
-  setIsJumpDestination() {
-    this.isJumpDestination = true;
   }
 }
 
