@@ -356,7 +356,7 @@ getOwner =
 
 ### insert(input:HexableValue)
 
-This function directly inserts a arbitrary value into the code. It does not check if the inserted value is valid code. This is used under the hood within `allocUnsafe()`, and contains the same safety risks. Use with caution. 
+This function directly inserts an arbitrary value into the code. It does not check if the inserted value is valid code. This is used under the hood within `allocUnsafe()`, and contains the same safety risks. Use with caution. 
 
 Definition: `Action: [], insert(input:HexableValue) => []`
 
@@ -392,7 +392,7 @@ revert()
 
 ### bail()
 
-This is a simple helper that reverts with no reason string. 
+This is a simple helper that reverts with no reason string. From a gas perspective, this is the cheapest revert available. 
 
 Definition: `Action: [], bail() => []`
 
@@ -457,8 +457,8 @@ This is a helper function for loading specific data from calldata. When no value
 
 Definition: 
 - `Action: [offset], calldataload() => [msg.data[offset]..msg.data[offset+32], ...]`
-- `Action: [], calldataload(offset) => [msg.data[offset]..msg.data[offset+32]]`
-- `Action: [], calldataload(offset, length) => [msg.data[offset]..msg.data[offset+length]]`
+- `Action: [], calldataload(offset) => [msg.data[offset]..msg.data[offset+32], ...]`
+- `Action: [], calldataload(offset, length) => [msg.data[offset]..msg.data[offset+length], ...]`
 
 ```javascript
 // Load the solidity 4-byte function signature (note length of 4)

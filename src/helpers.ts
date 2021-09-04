@@ -1,5 +1,5 @@
-import { ActionFunction, ContextFunction, ExpressionFunction } from "./actions";
-import {ActionPointer, ActionSource, Expression, Hexable, HexableValue, IntermediateRepresentation, sanitizeHexStrings} from "./grammar";
+import { ActionFunction, actionFunctions, ContextFunction, ExpressionFunction } from "./actions";
+import {ActionPointer, ActionSource, Expression, Hexable, HexableValue, Instruction, IntermediateRepresentation, sanitizeHexStrings} from "./grammar";
 import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from ".";
 
 export type UserFacingFunction = (...args: Expression[]) => Expression|ActionPointer;
@@ -50,6 +50,18 @@ export function createExpressionAndContextHandlers(runtimeContext:RuntimeContext
   }
 
   return handler;
+}
+
+export function createShorthandAction(instruction:Instruction, swapBeforeInstruction:boolean = false) {
+  return function(context:RuntimeContext, input:HexableValue) {
+    if (typeof input != "undefined") {
+      actionFunctions.push(context, input);
+      if (swapBeforeInstruction) {
+        context.intermediate.push(Instruction.SWAP1);
+      }
+    }
+    context.intermediate.push(instruction);
+  }
 }
 
 export function translateToBytecode(item:IntermediateRepresentation, executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {

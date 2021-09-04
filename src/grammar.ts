@@ -183,6 +183,7 @@ export type Expression = HexableValue|ConfigKeys|number|boolean|string|object;
 
 export type IntermediateRepresentation = ActionSource|HexableValue;
 
+
 // Mostly for typing.
 export class LabelPointer extends Hexable {
   labelName = "";

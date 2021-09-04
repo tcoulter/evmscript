@@ -13,7 +13,7 @@ import {
   SolidityTypes,
   ActionPointer
 } from "./grammar";
-import { byteLength } from "./helpers";
+import { byteLength, createShorthandAction } from "./helpers";
 import { RuntimeContext } from ".";
 import Enc from "@root/encoding";
 import ensure from "./ensure";
@@ -185,20 +185,6 @@ function pushCallDataOffsets(context:RuntimeContext, ...args:string[]) {
   context.intermediate.push(Instruction.POP);
 }
 
-function shr(context:RuntimeContext, input:HexableValue) {
-  if (typeof input != "undefined") {
-    push(context, input);
-  }
-  context.intermediate.push(Instruction.SHR);
-}
-
-function shl(context:RuntimeContext, input:HexableValue) {
-  if (typeof input != "undefined") {
-    push(context, input);
-  }
-  context.intermediate.push(Instruction.SHL);
-}
-
 function calldataload(context:RuntimeContext, offset:HexableValue, lengthInBytes:number = 32) {
   if (typeof offset != "undefined") {
     expectExport(lengthInBytes).toBeLessThanOrEqual(32);
@@ -312,7 +298,35 @@ function bail(context:RuntimeContext) {
   ]);
 }
 
-//function allocSolidityCallData
+
+
+
+const add = createShorthandAction(Instruction.ADD);
+const mul = createShorthandAction(Instruction.MUL);
+const sub = createShorthandAction(Instruction.SUB, true);
+const div = createShorthandAction(Instruction.DIV, true);
+const sdiv = createShorthandAction(Instruction.SDIV, true);
+const mod = createShorthandAction(Instruction.MOD, true);
+const smod = createShorthandAction(Instruction.SMOD, true);
+const exp = createShorthandAction(Instruction.EXP, true);
+const lt = createShorthandAction(Instruction.LT, true);
+const gt = createShorthandAction(Instruction.GT, true);
+const slt = createShorthandAction(Instruction.SLT, true);
+const sgt = createShorthandAction(Instruction.SGT, true);
+const eq = createShorthandAction(Instruction.EQ);
+const not = createShorthandAction(Instruction.NOT);
+const shr = createShorthandAction(Instruction.SHR);
+const shl = createShorthandAction(Instruction.SHL);
+const sar = createShorthandAction(Instruction.SAR);
+
+const balance = createShorthandAction(Instruction.BALANCE);
+const extcodesize = createShorthandAction(Instruction.EXTCODESIZE);
+const extcodehash = createShorthandAction(Instruction.EXTCODEHASH);
+const blockhash = createShorthandAction(Instruction.BLOCKHASH);
+
+const mload = createShorthandAction(Instruction.MLOAD);
+
+//// Expression functions
 
 function $set(context:RuntimeContext, key:string, value:string) {
   // TODO: key and value check; don't let users set wrong stuff/set incorrectly
@@ -359,20 +373,41 @@ function $pad(context:RuntimeContext, input:HexableValue, lengthInBytes:number, 
 //
 //  insert(...hex string..) -> directly insert bytecode at specified position. Check validity?
 
+
 export const actionFunctions:Record<string, ActionFunction> = {
+  add,
   alloc,
   allocStack,
   allocUnsafe,
   assertNonPayable,
+  balance,
   bail,
+  blockhash,
   dispatch,
+  div,
+  eq,
+  exp,
+  extcodehash,
+  extcodesize,
+  gt, 
   insert,
   jump,
   jumpi,
+  lt,
+  mload,
+  mod,
+  mul,
+  not,
   push,
   pushCallDataOffsets,
+  sar,
+  sdiv,
+  sgt,
   shl,
   shr,
+  slt,
+  smod,
+  sub,
   revert
 }
 
