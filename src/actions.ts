@@ -13,9 +13,11 @@ import {
   ActionPointer,
   IntermediateRepresentation,
   Action,
-  Instruction
+  Instruction,
+  RelativeStackReference,
+  ActionParameter
 } from "./grammar";
-import { byteLength, createShorthandAction } from "./helpers";
+import { byteLength } from "./helpers";
 import { RuntimeContext } from "./index";
 import Enc from "@root/encoding";
 import ensure from "./ensure";
@@ -300,6 +302,27 @@ function bail(context:RuntimeContext, intermediate:IntermediateRepresentation[])
     Instruction.DUP1,
     Instruction.REVERT
   );
+}
+
+
+export function createShorthandAction(instruction:Instruction, swapBeforeInstruction:boolean = false) {
+  return function(context:RuntimeContext, intermediate:IntermediateRepresentation[], ...args:ActionParameter[])  {
+    if (args.length > 0) {
+      // Leave stack references alone; otherwise push anything else passed. 
+      // Do this in reverse order as later params are lower in the stack.
+      args.reverse().forEach((item) => {
+        if (item instanceof RelativeStackReference) {
+          intermediate.push(item)
+        } else {
+          actionFunctions.push(context, intermediate, item)
+        }
+      })
+      if (swapBeforeInstruction) {
+        intermediate.push(Instruction.SWAP1);
+      }
+    }
+    intermediate.push(instruction);
+  }
 }
 
 const add = createShorthandAction(Instruction.ADD);

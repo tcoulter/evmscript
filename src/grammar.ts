@@ -205,16 +205,53 @@ export type HexLiteral = BigInt|number;
 export type HexableValue = Hexable|HexLiteral|Instruction;
 export type Expression = HexableValue|ConfigKeys|number|boolean|string|object; 
 
+export type ActionParameter = HexableValue|RelativeStackReference;
+
 export type IntermediateRepresentation = HexableValue;
 
-export class StackReference {
+export class RelativeStackReference extends Hexable {
+  static nextId = 0;
+
+  id:number;
+  action:Action;
+  index:number;
+
+  constructor(action:Action, index:number) {
+    super(); 
+    this.action = action;
+    this.index = index;
+    this.id = RelativeStackReference.nextId;
+    RelativeStackReference.nextId += 1;
+  }
+
+  // Not sure if the following are needed; here as a guard.
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+    throw new Error("FATAL ERROR: Stack references should never be converted to hex. Instead, they should have been replaced with DUPs during processing.");
+  }
+
+  byteLength():number {
+    return 1; // This will ultimately be replaced by a DUP.   
+  }
+}
+
+export class StackReference extends Hexable {
   static nextIndex = 0;
 
   id:number;
 
   constructor() {
+    super();
     this.id = StackReference.nextIndex;
     StackReference.nextIndex += 1;
+  }
+
+  // Not sure if the following are needed; here as a guard.
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+    throw new Error("FATAL ERROR: Stack references should never be converted to hex. Instead, they should have been replaced with DUPs during processing.");
+  }
+
+  byteLength():number {
+    throw new Error("FATAL ERROR: Stack references should never have their length evaluated. If so, it means they haven't been replaced properly.");
   }
 }
 
@@ -225,16 +262,22 @@ export class StackReference {
 export class Action extends Hexable {
   static nextId:number = 0;
 
+  name:string;
   id:number; 
-  intermediate: IntermediateRepresentation[] = [];
+  intermediate: IntermediateRepresentation[];
   isJumpDestination:boolean = false;
-  stack:StackReference[] = [];
+  stack:RelativeStackReference[];
 
-  constructor(isJumpDestination:boolean = false) {
+  constructor(isJumpDestination:boolean = false, name:string = "<unknown>") {
     super();
+    this.intermediate = [];
     this.isJumpDestination = isJumpDestination;
     this.id = Action.nextId;
+    this.name = name;
     Action.nextId += 1;
+
+    // Fill the stack up with relative stack references.
+    this.stack = new Array(16).fill(0).map((val, index) => new RelativeStackReference(this, index));
   }
 
   setIsJumpDestination() {
@@ -266,7 +309,7 @@ export class Action extends Hexable {
       .join("");
 
     if (this.isJumpDestination) {
-      hex = Instruction.JUMPDEST.toHex() + hex;;
+      hex = Instruction.JUMPDEST.toHex() + hex;
     }
 
     return hex;

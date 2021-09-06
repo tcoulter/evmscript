@@ -2,31 +2,17 @@ import vm from 'vm';
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { ExpressionFunction, actionFunctions, expressionFunctions, contextFunctions, ContextFunction } from "./actions";
-import { ActionPointer, StackReference, Action, Instruction } from "./grammar";
-import { byteLength, createActionHandler, createContextHandler, createExpressionAndContextHandlers, createExpressionHandler, translateToBytecode, UserFacingFunction } from './helpers';
+import { actionFunctions, expressionFunctions, contextFunctions } from "./actions";
+import { ActionPointer, StackReference, Action, Instruction, RelativeStackReference } from "./grammar";
+import { byteLength, createActionHandler, createContextHandler, createExpressionHandler, processStack, translateToBytecode, UserFacingFunction } from './helpers';
+import { Indexed } from '@ethersproject/abi';
 
 export class RuntimeContext {
   deployable: boolean = false;
   actions: Action[] = [];
   tail: Action[] = [];
-  stack: Array<StackReference> = [];
 
   pushAction(action:Action) {
-    action.intermediate
-      .filter((item) => item instanceof Instruction)
-      .forEach((instruction:Instruction) => {
-        let [removed, added] = instruction.stackDelta();
-
-        // Use Array here to do something N times as a one-liner
-        [...Array(removed)].forEach(() => this.stack.pop());
-        [...Array(added)].forEach(() => this.stack.push(new StackReference()));
-      
-        // TODO: Manage swaps.
-      })
-
-    action.stack = [...this.stack];
-
     this.actions.push(action);
   }
 
@@ -92,7 +78,9 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
       return [
         lowercaseKey,
         createActionHandler(runtimeContext, lowercaseKey, () => {
-          runtimeContext.actions.push(Instruction[key]);
+          let action = new Action();
+          action.intermediate.push(Instruction[key]);
+          runtimeContext.pushAction(action);
         })
       ]
     })
@@ -142,6 +130,45 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
   // After processing, concatenate the intermediate representation and tail data
   runtimeContext.actions = [...runtimeContext.actions, ...runtimeContext.tail];
   runtimeContext.tail = [] // for good measure
+
+  // Now process the stack, building real stack references at each action, 
+  // and converting relative stack references to real references. 
+  let stackHistory:Record<number, StackReference[]> = {};
+  let lastActionId = -1; 
+
+  runtimeContext.actions.forEach((action) => {
+    let stack:StackReference[] = lastActionId >= 0 ? stackHistory[lastActionId] : [];
+    stackHistory[action.id] = processStack(stack, action.intermediate);
+
+    let additionalDupCount = 0; 
+    action.intermediate = action.intermediate.map((item) => {
+      if (item instanceof RelativeStackReference) {
+        // Return a real reference, that's kept the same across actions
+        // so long as that stack position isn't consumed. 
+        let realReference = stackHistory[item.action.id][item.index];
+
+        // Look for the reference in the output stack from the last action,
+        // as that represents the stack state at the beginning of this action.
+        let currentDepth = stackHistory[lastActionId].indexOf(realReference);
+
+        if (currentDepth < 0) {
+          throw new Error("Stack slot referenced in a call to function " + action.name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.")
+        }
+
+        // We add one because DUP1 is the top (index 0)
+        // We also add the additionalDupCount because every DUP increases
+        // the size of the stack, and we need to account for that.
+        let dupNumber = (currentDepth + 1) + additionalDupCount;
+
+        additionalDupCount += 1;
+        return Instruction["DUP" + dupNumber];
+      }
+
+      return item;
+    });
+
+    lastActionId = action.id;
+  }); 
 
   // Note: After execution, node can set values of any type to the context,
   // so we can't rely on types here. Let's make that explicit.

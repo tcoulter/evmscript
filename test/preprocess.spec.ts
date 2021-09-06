@@ -410,5 +410,47 @@ describe("README example", () => {
   })
 })
 
+describe("Stack References", () => {
+  describe("General Processing", () => {
+    it("should allow stack references through array splatting the result of an action", () => {
+      let code = `
+        [$pushedValue] = push(0x1)
+
+        // throwing some javascript in there, just to be doubly sure
+        if (typeof $pushedValue == "undefined") {
+          throw new Error("Apparently $pushedValue was undefined!")
+        }
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).not.toThrowError();
+    })
+
+    it("should allow stack references in common actions, converting references to DUP's", () => {
+      let code = `
+      [$value1] = push(0x1);
+      [$value2] = push(0x2); 
+
+      // Since $value2 is rightmost, it needs to be on the stack first
+      // before $value1. Since it's referencing the top of the stack, 
+      // copying $value2 will be a DUP1, and the copying $value1 
+      // will be a DUP3 (because we just added another stack item
+      // with the DUP1)!
+
+      add($value1, $value2);
+      `
+
+      let bytecode = preprocess(code);
+
+      // The test here is that: 
+      // A) it translates the references to DUPs, and
+      // B) it recognizes that the second DUP is a DUP2 because the first DUP was added
+      expect(bytecode).toBe(
+        "0x60016002808201"
+      )
+    })
+  })
+})
 // TODO: Error messages on function sanitization
 // TODO: Error messages when attempting to redefine a built in function

@@ -1,5 +1,7 @@
 import expect from "expect";
-import { ByteRange, JumpMap, WordRange } from "../src/grammar";
+import { RuntimeContext } from "../src";
+import { Action, ByteRange, Instruction, JumpMap, StackReference, WordRange } from "../src/grammar";
+import { processStack } from "../src/helpers";
 
 describe('Grammar', () => {
 
@@ -89,3 +91,54 @@ describe('Grammar', () => {
     })
   })
 });
+
+describe("Runtime", () => {
+  describe("RuntimeContext", () => {
+    it("swaps the correct stack references when a SWAP is processed", () => {
+      let stack:StackReference[] = [];
+
+      let pushAction = new Action(); 
+      pushAction.intermediate.push(Instruction.PUSH1, 0x1);
+
+      let secondPushAction = new Action();
+      secondPushAction.intermediate.push(Instruction.PUSH1, 0x2); 
+
+      stack = processStack(stack, pushAction.intermediate);
+      stack = processStack(stack, secondPushAction.intermediate);
+
+
+      // Note that the ref numbers are swapped here. 
+      let [expectedRef2, expectedRef1] = stack; 
+
+      let swapAction = new Action(); 
+      swapAction.intermediate.push(Instruction.SWAP1); 
+
+      stack = processStack(stack, swapAction.intermediate);
+
+      let [actualRef1, actualRef2] = stack;
+
+      expect(actualRef1).toBe(expectedRef1);
+      expect(actualRef2).toBe(expectedRef2);
+
+      // Just to be doubly sure
+      expect(actualRef1).not.toBe(expectedRef2);
+      expect(actualRef2).not.toBe(expectedRef1);
+    })
+
+    it("errors when swapping too deeply", () => {
+      let stack:StackReference[] = [];
+
+      let pushAction = new Action(); 
+      pushAction.intermediate.push(Instruction.PUSH1, 0x1);
+
+      let swapAction = new Action(); 
+      swapAction.intermediate.push(Instruction.SWAP1); 
+
+      processStack(stack, pushAction.intermediate);
+      
+      expect(() => {
+        processStack(stack, swapAction.intermediate);
+      }).toThrowError("Cannot execute SWAP1: swap index out of range");
+    })
+  })
+})

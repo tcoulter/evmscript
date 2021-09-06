@@ -1,5 +1,5 @@
-import { ActionFunction, actionFunctions, ContextFunction, ExpressionFunction } from "./actions";
-import {Action, ActionPointer, Expression, Hexable, HexableValue, Instruction, IntermediateRepresentation, sanitizeHexStrings} from "./grammar";
+import { ActionFunction, ContextFunction, ExpressionFunction } from "./actions";
+import { Action, ActionParameter, ActionPointer, Expression, Hexable, HexableValue, Instruction, IntermediateRepresentation, RelativeStackReference, sanitizeHexStrings, StackReference } from "./grammar";
 import { ActionIndexToCodeLocation, ExecutedCodeContext, RuntimeContext } from "./index";
 
 export type UserFacingFunction = (...args: Expression[]) => Expression|ActionPointer;
@@ -21,14 +21,12 @@ export function byteLength(input:IntermediateRepresentation):number {
     return Math.floor(length / 2) + (length % 2);
   }
 
-  console.log("unknown", input)
-
   throw new Error("Unknown input to byteLength(): " + input);
 }
 
 export function createActionHandler(runtimeContext:RuntimeContext, key:string, fn:ActionFunction):UserFacingFunction {
   let handler:UserFacingFunction = function(...args:Expression[]) {
-    let mainAction = new Action();
+    let mainAction = new Action(false, "key");
     let mainActionPointer = mainAction.getPointer();
 
     args = args.map((input:Expression) => sanitizeHexStrings(input, key));
@@ -68,16 +66,35 @@ export function createContextHandler(runtimeContext:RuntimeContext, key:string, 
   return handler;
 }
 
-export function createShorthandAction(instruction:Instruction, swapBeforeInstruction:boolean = false) {
-  return function(context:RuntimeContext, intermediate:IntermediateRepresentation[], input:HexableValue) {
-    if (typeof input != "undefined") {
-      actionFunctions.push(context, intermediate, input);
-      if (swapBeforeInstruction) {
-        intermediate.push(Instruction.SWAP1);
+export function processStack(stack:StackReference[], intermediate:IntermediateRepresentation[]):StackReference[] {
+  let newStack = [...stack];
+
+  intermediate
+    .filter((item) => item instanceof Instruction)
+    .forEach((instruction:Instruction) => {
+      let [removed, added] = instruction.stackDelta();
+
+      // Use Array here to do something N times as a one-liner
+      [...Array(removed)].forEach(() => newStack.shift());
+      [...Array(added)].forEach(() => newStack.unshift(new StackReference()));
+    
+      // If this is a swap, process the swap on the stack
+      if (instruction.code >= 0x90 && instruction.code <= 0x9F) {
+        let swapIndex = instruction.code - 0x8F; // e.g., if SWAP1/0x90, will return reference at index 1
+        
+        if (swapIndex >= newStack.length) {
+          throw new Error("Cannot execute SWAP" + swapIndex + ": swap index out of range");
+        }
+
+        let top = newStack[0];
+        let toSwap = newStack[swapIndex]; 
+
+        newStack[0] = toSwap;
+        newStack[swapIndex] = top; 
       }
-    }
-    intermediate.push(instruction);
-  }
+    })
+  
+  return newStack;
 }
 
 export function translateToBytecode(item:IntermediateRepresentation, executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {

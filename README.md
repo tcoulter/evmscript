@@ -148,6 +148,20 @@ TODO. For now, see [the tests](./test).
 
 Note for TODO: We should show here how to use Javascript niceties, higher level examples, environment variables, injected variables, etc., and not just function definitions. 
 
+## Recommendations
+
+### Use semicolons when using stack references via array splats
+
+TODO: Fill this out.
+
+### Make sure loops are stack neutral, especially when using stack references
+
+TODO: Fill this out.
+
+### Keep stack references within scope. Be careful of using stack references out of scope (see first point)
+
+TODO: Fill this out.
+
 ## Function Defintion
 
 The following lists the helper functions available for preprocessing. Each function contains a type, which is either an `Action` or `Expression`, and a definition that describes how it manipulates the stack. Here's how to read this: 

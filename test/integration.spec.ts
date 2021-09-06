@@ -253,6 +253,7 @@ describe("Integration", () => {
     let bytecode = preprocess(code);
 
     let tx = await signer.sendTransaction({data: bytecode})
+
     let receipt = await provider.getTransactionReceipt(tx.hash);
     expect(receipt.contractAddress).toBeDefined();
 
