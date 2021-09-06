@@ -398,14 +398,9 @@ let reservedWords = {"return":"ret"};
 Object.keys(Instruction)
   .filter((key) => isNaN(parseInt(key)))  // enums have numeric keys too; filter those out
   .filter((key) => !actionFunctions[key.toLowerCase()]) // filter out instructions with already defined actions
-  .forEach((key) => {
-    let lowercaseKey = key.toLowerCase();
-
-    if (reservedWords[lowercaseKey]) {
-      lowercaseKey = reservedWords[lowercaseKey];
-    }
-
-    actionFunctions[lowercaseKey] = createDefaultAction(Instruction[key]);
+  .map<[string, string]>((key) => [key, key.toLowerCase()])
+  .forEach(([key, lowercaseKey]) => {
+    actionFunctions[reservedWords[lowercaseKey] || lowercaseKey] = createDefaultAction(Instruction[key]);
   })
 
 export const expressionFunctions:Record<string, ExpressionFunction> = {
