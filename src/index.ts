@@ -63,29 +63,6 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
   // returning a function that simply returns the instruction.
   let reservedWords = {"return":"ret"};
 
-  // Create default functions for any instructions that don't have 
-  // already defined action functions. 
-  Object.keys(Instruction)
-    .filter((key) => isNaN(parseInt(key)))  // enums have numeric keys too; filter those out
-    .filter((key) => !actionFunctions[key.toLowerCase()]) // filter out instructions with named actions
-    .map<[string, UserFacingFunction]>((key) => {
-      let lowercaseKey = key.toLowerCase();
-
-      if (reservedWords[lowercaseKey]) {
-        lowercaseKey = reservedWords[lowercaseKey];
-      }
-
-      return [
-        lowercaseKey,
-        createActionHandler(runtimeContext, lowercaseKey, () => {
-          let action = new Action();
-          action.intermediate.push(Instruction[key]);
-          runtimeContext.pushAction(action);
-        })
-      ]
-    })
-    .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
- 
   // Translate all internalFunctionPrefix'd keys to having the prefix removed, by adding
   // a preamble to the code. This ensures the user will receive an error if they
   // accidentally define a function of the same name. 

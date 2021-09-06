@@ -17,12 +17,11 @@ import {
   RelativeStackReference,
   ActionParameter
 } from "./grammar";
-import { byteLength } from "./helpers";
+import { byteLength, createActionHandler } from "./helpers";
 import { RuntimeContext } from "./index";
 import Enc from "@root/encoding";
 import ensure from "./ensure";
 import { ethers } from "ethers";
-import expectExport from "expect";
 
 export type ActionFunction = (context:RuntimeContext, intermediate:IntermediateRepresentation[], ...args: Expression[]) => Action[]|void;
 export type ExpressionFunction = (...args: Expression[]) => HexableValue;
@@ -193,13 +192,13 @@ function pushCallDataOffsets(context:RuntimeContext, intermediate:IntermediateRe
 
 function calldataload(context:RuntimeContext, intermediate:IntermediateRepresentation[], offset:HexableValue, lengthInBytes:number = 32) {
   if (typeof offset != "undefined") {
-    expectExport(lengthInBytes).toBeLessThanOrEqual(32);
+    ensure(lengthInBytes).toBeLessThanOrEqual(32);
 
     push(context, intermediate, offset)
     intermediate.push(Instruction.CALLDATALOAD);
 
     if (lengthInBytes != 32) {
-      shr(context, intermediate, (32 - lengthInBytes) * 8)
+      actionFunctions.shr(context, intermediate, (32 - lengthInBytes) * 8)
     }
   } else {
     intermediate.push(Instruction.CALLDATALOAD);
@@ -305,7 +304,7 @@ function bail(context:RuntimeContext, intermediate:IntermediateRepresentation[])
 }
 
 
-export function createShorthandAction(instruction:Instruction, swapBeforeInstruction:boolean = false) {
+export function createDefaultAction(instruction:Instruction, swapBeforeInstruction:boolean = false) {
   return function(context:RuntimeContext, intermediate:IntermediateRepresentation[], ...args:ActionParameter[])  {
     if (args.length > 0) {
       // Leave stack references alone; otherwise push anything else passed. 
@@ -324,31 +323,6 @@ export function createShorthandAction(instruction:Instruction, swapBeforeInstruc
     intermediate.push(instruction);
   }
 }
-
-const add = createShorthandAction(Instruction.ADD);
-const mul = createShorthandAction(Instruction.MUL);
-const sub = createShorthandAction(Instruction.SUB, true);
-const div = createShorthandAction(Instruction.DIV, true);
-const sdiv = createShorthandAction(Instruction.SDIV, true);
-const mod = createShorthandAction(Instruction.MOD, true);
-const smod = createShorthandAction(Instruction.SMOD, true);
-const exp = createShorthandAction(Instruction.EXP, true);
-const lt = createShorthandAction(Instruction.LT, true);
-const gt = createShorthandAction(Instruction.GT, true);
-const slt = createShorthandAction(Instruction.SLT, true);
-const sgt = createShorthandAction(Instruction.SGT, true);
-const eq = createShorthandAction(Instruction.EQ);
-const not = createShorthandAction(Instruction.NOT);
-const shr = createShorthandAction(Instruction.SHR);
-const shl = createShorthandAction(Instruction.SHL);
-const sar = createShorthandAction(Instruction.SAR);
-
-const balance = createShorthandAction(Instruction.BALANCE);
-const extcodesize = createShorthandAction(Instruction.EXTCODESIZE);
-const extcodehash = createShorthandAction(Instruction.EXTCODEHASH);
-const blockhash = createShorthandAction(Instruction.BLOCKHASH);
-
-const mload = createShorthandAction(Instruction.MLOAD);
 
 //// Expression functions
 
@@ -399,45 +373,40 @@ function $pad(input:HexableValue, lengthInBytes:number, side:("left"|"right") = 
 
 
 export const actionFunctions:Record<string, ActionFunction> = {
-  add,
   alloc,
   allocStack,
   allocUnsafe,
   assertNonPayable,
-  balance,
   bail,
-  blockhash,
   dispatch,
-  div,
-  eq,
-  exp,
-  extcodehash,
-  extcodesize,
-  gt, 
   insert,
   jump,
   jumpi,
-  lt,
-  mload,
-  mod,
-  mul,
-  not,
   push,
   pushCallDataOffsets,
-  sar,
-  sdiv,
-  sgt,
-  shl,
-  shr,
-  slt,
-  smod,
-  sub,
   revert
 }
 
 specificPushFunctions.forEach((fn, index) => {
   actionFunctions["push" + (index + 1)] = fn;
 })
+
+
+// Create default actions for any instructions that don't have 
+// already defined action functions. 
+let reservedWords = {"return":"ret"};
+Object.keys(Instruction)
+  .filter((key) => isNaN(parseInt(key)))  // enums have numeric keys too; filter those out
+  .filter((key) => !actionFunctions[key.toLowerCase()]) // filter out instructions with already defined actions
+  .forEach((key) => {
+    let lowercaseKey = key.toLowerCase();
+
+    if (reservedWords[lowercaseKey]) {
+      lowercaseKey = reservedWords[lowercaseKey];
+    }
+
+    actionFunctions[lowercaseKey] = createDefaultAction(Instruction[key]);
+  })
 
 export const expressionFunctions:Record<string, ExpressionFunction> = {
   $bytelen,
