@@ -327,10 +327,10 @@ describe("Expression Functions", () => {
     })
   })
 
-  describe("$set()", () => {
-    it("should create deployable bytecode when $set('deployable', true) is used", () => {
+  describe("$()", () => {
+    it("should create deployable bytecode when $('deployable', true) is used", () => {
       let code = `
-        $set("deployable", true)
+        $("deployable", true)
         push(0xAAAA) // just something dinstinctive
       `
 
@@ -381,7 +381,7 @@ describe("Expression Functions", () => {
 describe("README example", () => {
   it("shouldn't error", () => {
     let code = `
-      $set("deployable", true)
+      $("deployable", true)
 
       const TIMES = 5;
 

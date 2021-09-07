@@ -406,7 +406,7 @@ export function createDefaultAction(name:string, instruction:Instruction, swapBe
 
 //// Expression functions
 
-function $set(context:RuntimeContext, key:string, value:string) {
+function $(context:RuntimeContext, key:string, value:string) {
   // TODO: key and value check; don't let users set wrong stuff/set incorrectly
   context[key.toString().trim()] = value;
 }
@@ -493,5 +493,5 @@ export const expressionFunctions:Record<string, ExpressionFunction> = {
 }
 
 export const contextFunctions:Record<string, ContextFunction> = {
-  $set
+  $
 }

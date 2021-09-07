@@ -51,7 +51,7 @@ describe("Integration", () => {
     this.timeout(5000);
 
     let code = `
-      $set("deployable", true);
+      $("deployable", true);
 
       msize()     // push mem pointer
       
@@ -73,7 +73,7 @@ describe("Integration", () => {
 
   it("allocates memory correctly using alloc() (input < 32 bytes)", async () => {
     let code = `
-      $set("deployable", true)
+      $("deployable", true)
 
       alloc("0x12345") // Note: 3 bytes, will be left padded to 012345
       ret()
@@ -86,7 +86,7 @@ describe("Integration", () => {
 
   it("allocates memory correctly using alloc() (input > 32 bytes)", async () => {
     let code = `
-      $set("deployable", true)
+      $("deployable", true)
 
       alloc("0x1000111122223333444455556666777788889999AAAABBBBCCCCDDDDEEEEFFFF0001")
       ret()
@@ -100,7 +100,7 @@ describe("Integration", () => {
   // algorithm is the same regardless of input size.
   it("allocates memory correctly using allocUnsafe() (input > 32 bytes)", async () => {
     let code = `
-      $set("deployable", true)
+      $("deployable", true)
 
       allocUnsafe("0x1000111122223333444455556666777788889999AAAABBBBCCCCDDDDEEEEFFFF0001")
       ret()
@@ -114,14 +114,14 @@ describe("Integration", () => {
     let data = "0x1000111122223333444455556666777788889999AAAABBBBCCCCDDDDEEEEFFFF0001";
 
     let safeCode = `
-      $set("deployable", true)
+      $("deployable", true)
 
       alloc("${data}")
       ret()
     `
 
     let unsafeCode = `
-      $set("deployable", true)
+      $("deployable", true)
 
       allocUnsafe("${data}")
       ret()
@@ -138,7 +138,7 @@ describe("Integration", () => {
 
   it("should revert if Ether sent during deployment", async () => {
     let code = `
-      $set("deployable", true)
+      $("deployable", true)
 
       alloc($hex("hello"))
       ret()
@@ -188,7 +188,7 @@ describe("Integration", () => {
 
   it("pushes the correct calldata offsets, first at top of stack", async () => {
     let code = `
-      $set("deployable", true)
+      $("deployable", true)
 
       pushCallDataOffsets("uint", "bytes")
 
@@ -229,7 +229,7 @@ describe("Integration", () => {
     // https://www.4byte.directory/signatures/
 
     let code = `
-      $set("deployable", true)
+      $("deployable", true)
 
       // Note that I include the variable names here to show that they're
       // properly ignored when calculating the 4-byte hash. Also, I prefix
