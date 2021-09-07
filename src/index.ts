@@ -3,29 +3,22 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { actionFunctions, expressionFunctions, contextFunctions } from "./actions";
-import { ActionPointer, StackReference, Action, Instruction, RelativeStackReference } from "./grammar";
-import { byteLength, createActionHandler, createContextHandler, createExpressionHandler, processStack, translateToBytecode, UserFacingFunction } from './helpers';
-import { Indexed } from '@ethersproject/abi';
+import { ActionPointer, Action } from "./grammar";
+import { byteLength, convertActionsToIntermediateRepresentation, createActionHandler, createContextHandler, createExpressionHandler, processStack, translateToBytecode, UserFacingFunction } from './helpers';
 
 export class RuntimeContext {
   deployable: boolean = false;
   actions: Action[] = [];
-  tail: Action[] = [];
 
   pushAction(action:Action) {
     this.actions.push(action);
-  }
-
-  pushTailAction(action:Action) {
-    // We'll do processing later! 
-    this.tail.push(action);
   }
 }
 
 export type CodeContext = Record<string, UserFacingFunction>;
 export type ExecutedCodeContext = Record<string, any>;
 
-export type ActionIndexToCodeLocation = Record<number, BigInt>;
+export type ActionIdToCodeLocation = Record<number, BigInt>;
 
 export function preprocess(code:string, extraContext:Record<string, any> = {}, filename:string = "bytecode"):string {
 
@@ -57,11 +50,7 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     .filter((key) => typeof contextFunctions[key] == "function")
     .map<[string, UserFacingFunction]>((key) => [key, createContextHandler(runtimeContext, key, contextFunctions[key])])
     .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
-  
-  // Add default functions for instructions without set functions
-  // This will take the instruction names and lower case them,
-  // returning a function that simply returns the instruction.
-  let reservedWords = {"return":"ret"};
+
 
   // Translate all internalFunctionPrefix'd keys to having the prefix removed, by adding
   // a preamble to the code. This ensures the user will receive an error if they
@@ -104,49 +93,6 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     throw e; 
   } 
 
-  // After processing, concatenate the intermediate representation and tail data
-  runtimeContext.actions = [...runtimeContext.actions, ...runtimeContext.tail];
-  runtimeContext.tail = [] // for good measure
-
-  // Now process the stack, building real stack references at each action, 
-  // and converting relative stack references to real references. 
-  let stackHistory:Record<number, StackReference[]> = {};
-  let lastActionId = -1; 
-
-  runtimeContext.actions.forEach((action) => {
-    let stack:StackReference[] = lastActionId >= 0 ? stackHistory[lastActionId] : [];
-    stackHistory[action.id] = processStack(stack, action.intermediate);
-
-    let additionalDupCount = 0; 
-    action.intermediate = action.intermediate.map((item) => {
-      if (item instanceof RelativeStackReference) {
-        // Return a real reference, that's kept the same across actions
-        // so long as that stack position isn't consumed. 
-        let realReference = stackHistory[item.action.id][item.index];
-
-        // Look for the reference in the output stack from the last action,
-        // as that represents the stack state at the beginning of this action.
-        let currentDepth = stackHistory[lastActionId].indexOf(realReference);
-
-        if (currentDepth < 0) {
-          throw new Error("Stack slot referenced in a call to function " + action.name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.")
-        }
-
-        // We add one because DUP1 is the top (index 0)
-        // We also add the additionalDupCount because every DUP increases
-        // the size of the stack, and we need to account for that.
-        let dupNumber = (currentDepth + 1) + additionalDupCount;
-
-        additionalDupCount += 1;
-        return Instruction["DUP" + dupNumber];
-      }
-
-      return item;
-    });
-
-    lastActionId = action.id;
-  }); 
-
   // Note: After execution, node can set values of any type to the context,
   // so we can't rely on types here. Let's make that explicit.
   let executedCodeContext:ExecutedCodeContext = codeContext;
@@ -161,35 +107,46 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     .map<ActionPointer>((key) => executedCodeContext[key])
     .forEach((actionPointer) => actionPointer.action.setIsJumpDestination())
 
+  // Next, concatenate the intermediate representation and tail data
+  let actions = runtimeContext.actions;
+  actions.forEach((action) => {
+    actions.push(...action.tail)
+  })
+
+  let {
+    intermediate, 
+    headActionIndexes,
+    actionInstructionStart
+  } = convertActionsToIntermediateRepresentation(actions);
+
+  // Now process the stack, converting all stack references to DUPs
+  let {dereferencedIntermediate} = processStack(intermediate, actions, headActionIndexes);
+
   // 1. Compute the byte lengths of each item in the intermediate representation
   // 2. Sum result to determine the total bytes at each index
-  // 3. Create a record of ActionSource indeces -> total bytes, as this represents the jump destination 
-  let codeLocations:ActionIndexToCodeLocation = {};
-  let byteLengths = runtimeContext.actions
-    .map((item) => byteLength(item))
-
+  // 3. Create a record of Action indeces -> total bytes, as this represents the jump destination 
+  let codeLocations:ActionIdToCodeLocation = {};
+  
+  let byteLengths = dereferencedIntermediate.map((item) => byteLength(item))
   let sum = 0; 
-  byteLengths
+  let totalBytes = byteLengths
     .map((length) => {
       sum += length;
       return sum;
     }) 
-    .forEach((totalBytes, index) => {
-      let item = runtimeContext.actions[index];
 
-      if (!(item instanceof Action)) {
-        return;
-      }
-
-      // Don't include the current byte length as that'll point to the following byte! 
-      codeLocations[item.id] = BigInt(totalBytes - byteLengths[index]);
-    })
+  Object.keys(actionInstructionStart).forEach((idAsString:string) => {
+    let id = parseInt(idAsString);
+    let firstInstructionIndex = actionInstructionStart[id];
+    // Don't include the current byte length as that'll point to the following byte! 
+    codeLocations[id] = BigInt(totalBytes[firstInstructionIndex] - byteLengths[firstInstructionIndex])
+  });
 
   // Now loop through the intermediate representation translating
   // action pointers and label pointers to their final values.
   let bytecode = [];
 
-  runtimeContext.actions.forEach((item) => {
+  dereferencedIntermediate.forEach((item) => {
     let translation = translateToBytecode(item, executedCodeContext, codeLocations);
 
     if (translation) {

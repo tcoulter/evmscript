@@ -1,10 +1,10 @@
 import { byteLength, leftPad, POINTER_BYTE_LENGTH, rightPad, translateToBytecode } from "./helpers";
-import { ActionIndexToCodeLocation, ExecutedCodeContext } from "./index";
+import { ActionIdToCodeLocation, ExecutedCodeContext } from "./index";
 
 export type StackDelta = [number, number];
 
 export abstract class Hexable {
-  abstract toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string;
+  abstract toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string;
   abstract byteLength():number;
 }
 
@@ -186,7 +186,7 @@ export class Instruction extends Hexable {
     return 1;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext={}, codeLocations:ActionIndexToCodeLocation={}) {
+  toHex(executedCodeContext:ExecutedCodeContext={}, codeLocations:ActionIdToCodeLocation={}) {
     return BigInt(this.code).toString(16)
   }
 }
@@ -207,7 +207,7 @@ export type Expression = HexableValue|ConfigKeys|number|boolean|string|object;
 
 export type ActionParameter = HexableValue|RelativeStackReference;
 
-export type IntermediateRepresentation = HexableValue;
+export type IntermediateRepresentation = Action|HexableValue;
 
 export class RelativeStackReference extends Hexable {
   static nextId = 0;
@@ -225,7 +225,7 @@ export class RelativeStackReference extends Hexable {
   }
 
   // Not sure if the following are needed; here as a guard.
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
     throw new Error("FATAL ERROR: Stack references should never be converted to hex. Instead, they should have been replaced with DUPs during processing.");
   }
 
@@ -246,7 +246,7 @@ export class StackReference extends Hexable {
   }
 
   // Not sure if the following are needed; here as a guard.
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
     throw new Error("FATAL ERROR: Stack references should never be converted to hex. Instead, they should have been replaced with DUPs during processing.");
   }
 
@@ -264,14 +264,16 @@ export class Action extends Hexable {
 
   name:string;
   id:number; 
-  intermediate: IntermediateRepresentation[];
+  intermediate:IntermediateRepresentation[];
+  tail:Action[];
   isJumpDestination:boolean = false;
   stack:RelativeStackReference[];
+  pointer:ActionPointer;
 
-  constructor(isJumpDestination:boolean = false, name:string = "<unknown>") {
+  constructor(name:string) {
     super();
     this.intermediate = [];
-    this.isJumpDestination = isJumpDestination;
+    this.tail = [];
     this.id = Action.nextId;
     this.name = name;
     Action.nextId += 1;
@@ -300,10 +302,21 @@ export class Action extends Hexable {
   }
 
   getPointer() {
-    return new ActionPointer(this);
+    if (!this.pointer) {
+      this.pointer = new ActionPointer(this);
+    }
+    return this.pointer;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string { 
+  push(...items:IntermediateRepresentation[]) {
+    this.intermediate.push(...items);
+  }
+
+  pushTail(...items:Action[]) {
+    this.tail.push(...items);
+  }
+
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string { 
     let hex = this.intermediate
       .map((item) => translateToBytecode(item, executedCodeContext, codeLocations))
       .join("");
@@ -326,6 +339,10 @@ export class Action extends Hexable {
 
     return length;
   }
+
+  toString() {
+    return "Action(" + this.name + "):" + this.id;
+  }
 }
 
 export class LabelPointer extends Hexable {
@@ -336,7 +353,7 @@ export class LabelPointer extends Hexable {
     this.labelName = labelName;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
     let actionPointer = executedCodeContext[this.labelName];
 
     if (!actionPointer || !(actionPointer instanceof ActionPointer)) {
@@ -359,7 +376,7 @@ export class ActionPointer extends Hexable {
     this.action = action;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string { 
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string { 
     return leftPad(
       codeLocations[this.action.id].toString(16),
       POINTER_BYTE_LENGTH
@@ -396,7 +413,7 @@ export class ConcatedHexValue extends Hexable {
     this.items = items;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
     let bytecode = this.items
       .map<string>((item) => translateToBytecode(item, executedCodeContext, codeLocations))
       .join("");
@@ -431,7 +448,7 @@ export class ByteRange extends Hexable {
     this.lengthInBytes = lengthInBytes;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
     // This is naive, and will convert the item to hex multiple 
     // times if other ranges exist over the same data. That's fine for now. 
     let bytecode = translateToBytecode(this.item, executedCodeContext, codeLocations);
@@ -473,7 +490,7 @@ export class Padded extends Hexable {
     this.side = side;
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation) {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation) {
     let bytecode = translateToBytecode(this.item, executedCodeContext, codeLocations);
 
     if (this.side == "left") {
@@ -498,7 +515,7 @@ export class SolidityString extends Hexable {
     this.length = byteLength(str);
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation) {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation) {
     let value = new ConcatedHexValue(
       new Padded(this.length, 32),
       new Padded(this.str, 32, "right")
@@ -520,7 +537,7 @@ export class JumpMap extends Hexable {
     this.items = new ConcatedHexValue(...items.map((str) => new LabelPointer(str)));
   }
 
-  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIndexToCodeLocation):string {
+  toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
     return rightPad(
       this.items.toHex(executedCodeContext, codeLocations),
       32

@@ -1,7 +1,7 @@
 import expect from "expect";
 import { RuntimeContext } from "../src";
 import { Action, ByteRange, Instruction, JumpMap, StackReference, WordRange } from "../src/grammar";
-import { processStack } from "../src/helpers";
+import { convertActionsToIntermediateRepresentation, InstructionIndexToActionIndex, processStack } from "../src/helpers";
 
 describe('Grammar', () => {
 
@@ -95,27 +95,38 @@ describe('Grammar', () => {
 describe("Runtime", () => {
   describe("RuntimeContext", () => {
     it("swaps the correct stack references when a SWAP is processed", () => {
-      let stack:StackReference[] = [];
-
-      let pushAction = new Action(); 
+      let pushAction = new Action("push"); 
       pushAction.intermediate.push(Instruction.PUSH1, 0x1);
 
-      let secondPushAction = new Action();
+      let secondPushAction = new Action("push1");
       secondPushAction.intermediate.push(Instruction.PUSH1, 0x2); 
 
-      stack = processStack(stack, pushAction.intermediate);
-      stack = processStack(stack, secondPushAction.intermediate);
-
-
-      // Note that the ref numbers are swapped here. 
-      let [expectedRef2, expectedRef1] = stack; 
-
-      let swapAction = new Action(); 
+      let swapAction = new Action("swap1"); 
       swapAction.intermediate.push(Instruction.SWAP1); 
 
-      stack = processStack(stack, swapAction.intermediate);
+      let actions = [
+        pushAction,
+        secondPushAction,
+        swapAction
+      ];
 
-      let [actualRef1, actualRef2] = stack;
+      let {intermediate} = convertActionsToIntermediateRepresentation(actions);
+
+      let instructionIndexToActionIndex:InstructionIndexToActionIndex = [
+        actions.indexOf(pushAction),
+        actions.indexOf(pushAction), // value pushed
+        actions.indexOf(secondPushAction),
+        actions.indexOf(secondPushAction), // value pushed
+        actions.indexOf(swapAction)
+      ];
+
+      let {stackHistory} = processStack(intermediate, actions, instructionIndexToActionIndex);
+
+      let beforeSwap = stackHistory[1];
+      let afterSwap = stackHistory[2];
+
+      let [expectedRef2, expectedRef1] = beforeSwap;
+      let [actualRef1, actualRef2] = afterSwap;
 
       expect(actualRef1).toBe(expectedRef1);
       expect(actualRef2).toBe(expectedRef2);
@@ -126,18 +137,27 @@ describe("Runtime", () => {
     })
 
     it("errors when swapping too deeply", () => {
-      let stack:StackReference[] = [];
-
-      let pushAction = new Action(); 
+      let pushAction = new Action("push"); 
       pushAction.intermediate.push(Instruction.PUSH1, 0x1);
 
-      let swapAction = new Action(); 
+      let swapAction = new Action("swap1"); 
       swapAction.intermediate.push(Instruction.SWAP1); 
 
-      processStack(stack, pushAction.intermediate);
-      
+      let actions = [
+        pushAction,
+        swapAction
+      ];
+
+      let {intermediate} = convertActionsToIntermediateRepresentation(actions);
+
+      let instructionIndexToActionIndex:InstructionIndexToActionIndex = [
+        actions.indexOf(pushAction),
+        actions.indexOf(pushAction), // value pushed
+        actions.indexOf(swapAction)
+      ];
+
       expect(() => {
-        processStack(stack, swapAction.intermediate);
+        processStack(intermediate, actions, instructionIndexToActionIndex);
       }).toThrowError("Cannot execute SWAP1: swap index out of range");
     })
   })
