@@ -452,5 +452,19 @@ describe("Stack References", () => {
     })
   })
 })
+
+describe("Composable functions", () => {
+  it("functions are composable, and arguments are processed right to left", () => {
+    let code = `
+      add(5, mul(2,3))
+    `
+
+    let bytecode = preprocess(code);
+
+    expect(bytecode).toBe(
+      "0x6003600202600501"
+    )
+  })
+})
 // TODO: Error messages on function sanitization
 // TODO: Error messages when attempting to redefine a built in function

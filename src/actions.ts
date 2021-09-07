@@ -383,8 +383,15 @@ export function createDefaultAction(name:string, instruction:Instruction, swapBe
       args.reverse().forEach((item) => {
         if (item instanceof RelativeStackReference) {
           action.push(item)
+        } else if (item instanceof ActionPointer) {
+          // If we received an ActionPointer as input to a function, 
+          // it means the user is composing functions.
+          // To process correctly, push the action and not the pointer.
+          action.push(item.action);
         } else {
-          action.push(actionFunctions.push(item))
+          action.push(
+            actionFunctions.push(item)
+          )
         }
       })
       if (swapBeforeInstruction) {

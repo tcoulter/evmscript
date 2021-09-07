@@ -3,8 +3,8 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { actionFunctions, expressionFunctions, contextFunctions } from "./actions";
-import { ActionPointer, Action } from "./grammar";
-import { byteLength, convertActionsToIntermediateRepresentation, createActionHandler, createContextHandler, createExpressionHandler, processStack, translateToBytecode, UserFacingFunction } from './helpers';
+import { ActionPointer, Action, IntermediateRepresentation, Instruction, StackReference, RelativeStackReference } from "./grammar";
+import { byteLength, createActionHandler, createContextHandler, createExpressionHandler, translateToBytecode, UserFacingFunction } from './helpers';
 
 export class RuntimeContext {
   deployable: boolean = false;
@@ -108,67 +108,8 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     .forEach((actionPointer) => actionPointer.action.setIsJumpDestination())
 
   // Next, concatenate the intermediate representation and tail data
-  let actions = runtimeContext.actions;
-  actions.forEach((action) => {
-    actions.push(...action.tail)
-  })
-
-  let {
-    intermediate, 
-    headActionIndexes,
-    actionInstructionStart
-  } = convertActionsToIntermediateRepresentation(actions);
-
-  // Now process the stack, converting all stack references to DUPs
-  let {dereferencedIntermediate} = processStack(intermediate, actions, headActionIndexes);
-
-  // 1. Compute the byte lengths of each item in the intermediate representation
-  // 2. Sum result to determine the total bytes at each index
-  // 3. Create a record of Action indeces -> total bytes, as this represents the jump destination 
-  let codeLocations:ActionIdToCodeLocation = {};
-  
-  let byteLengths = dereferencedIntermediate.map((item) => byteLength(item))
-  let sum = 0; 
-  let totalBytes = byteLengths
-    .map((length) => {
-      sum += length;
-      return sum;
-    }) 
-
-  Object.keys(actionInstructionStart).forEach((idAsString:string) => {
-    let id = parseInt(idAsString);
-    let firstInstructionIndex = actionInstructionStart[id];
-    // Don't include the current byte length as that'll point to the following byte! 
-    codeLocations[id] = BigInt(totalBytes[firstInstructionIndex] - byteLengths[firstInstructionIndex])
-  });
-
-  // Now loop through the intermediate representation translating
-  // action pointers and label pointers to their final values.
-  let bytecode = [];
-
-  dereferencedIntermediate.forEach((item) => {
-    let translation = translateToBytecode(item, executedCodeContext, codeLocations);
-
-    if (translation) {
-      bytecode.push(translation);
-    }
-  });
-
-  let output = bytecode.map((item) => {
-    let str = item.toString(16);
-      
-    while (str.length % 2 != 0) {
-      str = "0" + str;
-    }
-
-    return str;
-  }).join("");
-
-  if (output.length % 2 != 0) {
-    throw new Error("CRITICAL FAILURE: Final value has odd byte offset!")
-  }
-
-  output = "0x" + output.toUpperCase();
+  let processor = new ActionProcessor(runtimeContext.actions, executedCodeContext);
+  let output = processor.processAll();
 
   // If the code is set to deployable, use our own preprocessor to create
   // a deployer for that code.
@@ -184,4 +125,196 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
 export function preprocessFile(inputFile:string, extraContext:Record<string, any> = {}) {
   let input:string = fs.readFileSync(inputFile, "utf-8");
   return preprocess(input, extraContext, inputFile);
+}
+
+export type InstructionIndexToActionIndex = Array<number>;
+export type ActionIdToInstructionIndex = Record<number, number>;
+export type StackHistory = Array<StackReference[]>;
+
+export class ActionProcessor {
+  actions:Action[];
+  executedCodeContext:ExecutedCodeContext;
+  intermediate:IntermediateRepresentation[] = [];
+  parentActionIndexes:InstructionIndexToActionIndex = [];
+  actionInstructionStartIndex:ActionIdToInstructionIndex = {};
+  stackHistory:StackHistory = [];
+  bytesPerInstruction:Array<number>;
+  totalBytesAtInstruction:Array<number>;
+  jumpDestinations:ActionIdToCodeLocation = {}
+
+  constructor(actions:Action[], executedCodeContext:ExecutedCodeContext) {
+    // Push any tail actions to the end.
+    this.actions = [...actions];
+    
+    this.actions.forEach((action) => {
+      this.actions.push(...action.tail)
+    })
+
+    // Prune actions that are a child of another action
+    this.actions = this.actions.filter((action) => typeof action.parentAction == "undefined");
+
+    this.executedCodeContext = executedCodeContext;
+  }
+
+  processAll() {
+    this.processActions();
+    this.processStack();
+    this.processByteLengths();
+    this.processJumpDestinations();
+    return this.toHex();
+  }
+
+  processActions() {
+    // Since actions can themselves contain actions, lets flatten array into 
+    // a single intermediate representation representing the whole program. 
+    let processAction = (action:Action, parentIndex:number) => {
+      // Save the index of intermediate where the action starts
+      this.actionInstructionStartIndex[action.id] = this.intermediate.length;
+      
+      // If it's a jump destintation, insert one. Note that
+      // this instruction gets attributed to the head index.
+      if (action.isJumpDestination) {
+        this.parentActionIndexes[this.intermediate.length] = parentIndex; 
+        this.intermediate.push(Instruction.JUMPDEST);
+      }
+
+      // Process all instructions of the action, attributing
+      // the instructions to the head action. 
+      action.intermediate.forEach((item) => {
+        if (item instanceof Action) {
+          processAction(item, parentIndex);
+        } else {
+          this.parentActionIndexes[this.intermediate.length] = parentIndex; 
+          this.intermediate.push(item);
+        }
+      })
+    }
+
+    this.actions.forEach(processAction);
+  }
+
+  processStack() {
+    let currentActionIndex:number = 0;
+    let stack:StackReference[] = [];
+    let addionionalDupsThisAction = 0; 
+  
+    this.intermediate = this.intermediate.map((item:IntermediateRepresentation, itemIndex:number) => {
+      currentActionIndex = this.parentActionIndexes[itemIndex];
+
+      // Convert stack references to DUPs, and then process the dup as a 
+      // normal instruction.
+      if (item instanceof RelativeStackReference) {
+        if (currentActionIndex == 0) {
+          throw new Error("FATAL ERROR: unexpected stack reference pointing to first processable action.");
+        }
+
+        // Return a real reference, that's kept the same across actions
+        // so long as that stack position isn't consumed. 
+        let realReference = this.stackHistory[this.actions.indexOf(item.action)][item.index];
+
+        // Look for the reference in the output stack from the last action,
+        // as that represents the stack state at the beginning of this action.
+        let currentDepth = this.stackHistory[currentActionIndex - 1].indexOf(realReference);
+
+        if (currentDepth < 0) {
+          throw new Error("Stack slot referenced in a call to function " + item.action.name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.")
+        }
+
+        // We add one because DUP1 is the top (index 0)
+        let dupNumber = (currentDepth + 1) + addionionalDupsThisAction;
+
+        // We don't return the DUP. Instead, we set item to be the DUP
+        // so it'll get processed like normal in the block below.
+        item = Instruction["DUP" + dupNumber];
+        addionionalDupsThisAction += 1;
+      } 
+
+      if (item instanceof Instruction) {
+        let instruction = item;
+        let [removed, added] = instruction.stackDelta();
+
+        // Use Array here to do something N times as a one-liner
+        [...Array(removed)].forEach(() => stack.shift());
+        [...Array(added)].forEach(() => stack.unshift(new StackReference()));
+      
+        // If this is a swap, process the swap on the stack
+        if (instruction.code >= 0x90 && instruction.code <= 0x9F) {
+          let swapIndex = instruction.code - 0x8F; // e.g., if SWAP1/0x90, will return reference at index 1
+          
+          if (swapIndex >= stack.length) {
+            throw new Error("Cannot execute SWAP" + swapIndex + ": swap index out of range");
+          }
+
+          let top = stack[0];
+          let toSwap = stack[swapIndex]; 
+
+          stack[0] = toSwap;
+          stack[swapIndex] = top; 
+        }
+      }
+
+      // If this is the last instruction of the action, save a shallow copy to stack history.
+      if (itemIndex + 1 >= this.intermediate.length || this.parentActionIndexes[itemIndex + 1] != currentActionIndex) {
+        this.stackHistory[currentActionIndex] = [...stack];
+        addionionalDupsThisAction = 0; 
+      }
+      
+      return item;
+    })
+  }
+
+  processByteLengths() {
+    // 1. Compute the byte lengths of each item in the intermediate representation
+    // 2. Sum result to determine the total bytes at each index
+    // 3. Create a record of Action indeces -> total bytes, as this represents the jump destination    
+    this.bytesPerInstruction = this.intermediate.map((item) => byteLength(item))
+    
+    let sum = 0; 
+    this.totalBytesAtInstruction = this.bytesPerInstruction
+      .map((length) => {
+        sum += length;
+        return sum;
+      }) 
+  }
+
+  processJumpDestinations() {
+    Object.keys(this.actionInstructionStartIndex).forEach((idAsString:string) => {
+      let id = parseInt(idAsString);
+      let firstInstructionIndex = this.actionInstructionStartIndex[id];
+      // Don't include the current byte length as that'll point to the following byte! 
+      this.jumpDestinations[id] = BigInt(this.totalBytesAtInstruction[firstInstructionIndex] - this.bytesPerInstruction[firstInstructionIndex])
+    });
+  }
+
+  toHex() {
+    // Now loop through the intermediate representation translating
+    // action pointers and label pointers to their final values.
+    let bytecode = [];
+
+    this.intermediate.forEach((item) => {
+      let translation = translateToBytecode(item, this.executedCodeContext, this.jumpDestinations);
+
+      if (translation) {
+        bytecode.push(translation);
+      }
+    });
+
+    let output = bytecode.map((item) => {
+      let str = item.toString(16);
+        
+      while (str.length % 2 != 0) {
+        str = "0" + str;
+      }
+
+      return str;
+    }).join("");
+
+    if (output.length % 2 != 0) {
+      throw new Error("CRITICAL FAILURE: Final value has odd byte offset!")
+    }
+
+    output = "0x" + output.toUpperCase();
+
+    return output;
+  }
 }

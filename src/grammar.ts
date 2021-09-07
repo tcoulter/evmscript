@@ -264,22 +264,24 @@ export class Action extends Hexable {
 
   name:string;
   id:number; 
+  parentAction:Action;
   intermediate:IntermediateRepresentation[];
   tail:Action[];
-  isJumpDestination:boolean = false;
   stack:RelativeStackReference[];
   pointer:ActionPointer;
+  isJumpDestination:boolean = false;
 
   constructor(name:string) {
     super();
+    this.name = name;
+    this.id = Action.nextId;
     this.intermediate = [];
     this.tail = [];
-    this.id = Action.nextId;
-    this.name = name;
-    Action.nextId += 1;
-
+    
     // Fill the stack up with relative stack references.
     this.stack = new Array(16).fill(0).map((val, index) => new RelativeStackReference(this, index));
+
+    Action.nextId += 1;
   }
 
   setIsJumpDestination() {
@@ -309,6 +311,11 @@ export class Action extends Hexable {
   }
 
   push(...items:IntermediateRepresentation[]) {
+    items.forEach((item) => {
+      if (item instanceof Action) {
+        item.parentAction = this;
+      }
+    })
     this.intermediate.push(...items);
   }
 

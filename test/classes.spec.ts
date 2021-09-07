@@ -1,7 +1,6 @@
 import expect from "expect";
-import { RuntimeContext } from "../src";
+import { ActionProcessor, RuntimeContext } from "../src";
 import { Action, ByteRange, Instruction, JumpMap, StackReference, WordRange } from "../src/grammar";
-import { convertActionsToIntermediateRepresentation, InstructionIndexToActionIndex, processStack } from "../src/helpers";
 
 describe('Grammar', () => {
 
@@ -93,7 +92,7 @@ describe('Grammar', () => {
 });
 
 describe("Runtime", () => {
-  describe("RuntimeContext", () => {
+  describe("ActionProcessor", () => {
     it("swaps the correct stack references when a SWAP is processed", () => {
       let pushAction = new Action("push"); 
       pushAction.intermediate.push(Instruction.PUSH1, 0x1);
@@ -110,20 +109,13 @@ describe("Runtime", () => {
         swapAction
       ];
 
-      let {intermediate} = convertActionsToIntermediateRepresentation(actions);
+      let actionProcessor:ActionProcessor = new ActionProcessor(actions, {});
 
-      let instructionIndexToActionIndex:InstructionIndexToActionIndex = [
-        actions.indexOf(pushAction),
-        actions.indexOf(pushAction), // value pushed
-        actions.indexOf(secondPushAction),
-        actions.indexOf(secondPushAction), // value pushed
-        actions.indexOf(swapAction)
-      ];
+      actionProcessor.processActions();
+      actionProcessor.processStack();
 
-      let {stackHistory} = processStack(intermediate, actions, instructionIndexToActionIndex);
-
-      let beforeSwap = stackHistory[1];
-      let afterSwap = stackHistory[2];
+      let beforeSwap = actionProcessor.stackHistory[1];
+      let afterSwap = actionProcessor.stackHistory[2];
 
       let [expectedRef2, expectedRef1] = beforeSwap;
       let [actualRef1, actualRef2] = afterSwap;
@@ -148,16 +140,12 @@ describe("Runtime", () => {
         swapAction
       ];
 
-      let {intermediate} = convertActionsToIntermediateRepresentation(actions);
+      let actionProcessor:ActionProcessor = new ActionProcessor(actions, {});
 
-      let instructionIndexToActionIndex:InstructionIndexToActionIndex = [
-        actions.indexOf(pushAction),
-        actions.indexOf(pushAction), // value pushed
-        actions.indexOf(swapAction)
-      ];
+      actionProcessor.processActions();
 
       expect(() => {
-        processStack(intermediate, actions, instructionIndexToActionIndex);
+        actionProcessor.processStack();
       }).toThrowError("Cannot execute SWAP1: swap index out of range");
     })
   })
