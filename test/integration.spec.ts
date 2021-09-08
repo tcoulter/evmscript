@@ -19,6 +19,7 @@ async function deployCodeAndCall(
   // tx = await signer.sendTransaction({
   //   to: receipt.contractAddress
   // });
+  // console.log(tx);
 
   // Let's call it ourselves
   let result = await signer.call({
@@ -265,6 +266,71 @@ describe("Integration", () => {
     let value:ethers.BigNumber = await contract.callStatic.getLauncherTemplateId("0x1111222233334444555566667777888899990000"); 
 
     expect(value.toString()).toBe("0x1234567890123456789012345678901234567890");
+  })
+
+  it("works just dandy with complex composables and stack references", async () => {
+    // Used in this test: 
+    // 
+    // - multiple composables with stack references in each param
+    // - set() with a single param
+    // - set() with two params
+    // - dup stack references (e.g., add($value, ...))
+    // - swap stack references (e.g., set($value))
+    // - allocStack with a stack reference instead of an amount
+    // 
+    // Probably worthwhile keepthing these things covered here.
+    let code = `
+      $("deployable", true)
+
+      ;[$value]   = push(1)
+      ;[$counter] = push(1)
+
+      loop = 
+        add($value, mul(sub($counter, 1), $counter))
+        set($value)
+        set($counter, add($counter, 1))
+        jumpi(loop, lt($counter, 6))
+
+      set($value, add($value, 1))
+      allocStack($value)
+      ret()
+    `
+
+    let bytecode = preprocess(code);
+    let deploymentPreamble = "341561000A57600080FD5B602B59816100158239F3";
+
+    // We compare the bytecode here for good measure
+    expect(bytecode).toBe(
+      "0x" + deploymentPreamble + "600160015B80600182030282019150600181019050600681106100045760018201915059825952602090F3"
+    )
+
+    // The above code is equivalent to:
+    //
+    // let value = 1; 
+    // let counter = 1;
+    // do {
+    //   value += (counter - 1) * counter;
+    //   counter += 1;
+    // } while (counter < 5)
+    // value += 1;
+    //
+    //
+    // The loop produces the following:
+    // 
+    //   counter: value
+    //   -------: -----
+    //         1: 1
+    //         2: 3
+    //         3: 9
+    //         4: 21
+    //         5: 41
+    //
+    // Then, the algorithm adds 1 to the last value.
+    // Which means that, if this code works, it should return 42.
+
+    let [result] = await deployCodeAndCall(code, signer, provider);
+
+    expect(BigInt(result).toString(10)).toBe("42");
   })
 
 })

@@ -196,7 +196,6 @@ export class ActionProcessor {
   processStack() {
     let currentActionIndex:number = 0;
     let stack:StackReference[] = [];
-    let addionionalDupsThisAction = 0; 
   
     this.intermediate = this.intermediate.map((item:IntermediateRepresentation, itemIndex:number) => {
       currentActionIndex = this.parentActionIndexes[itemIndex];
@@ -214,19 +213,17 @@ export class ActionProcessor {
 
         // Look for the reference in the output stack from the last action,
         // as that represents the stack state at the beginning of this action.
-        let currentDepth = this.stackHistory[currentActionIndex - 1].indexOf(realReference);
+        let currentDepth = stack.indexOf(realReference);
 
         if (currentDepth < 0) {
-          throw new Error("Stack slot referenced in a call to function " + item.action.name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.")
+          throw new Error("Stack slot referenced in call to function " + this.actions[currentActionIndex].name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.")
         }
 
-        // We add one because DUP1 is the top (index 0)
-        let dupNumber = (currentDepth + 1) + addionionalDupsThisAction;
+        // Replace the stack reference with the correct instruction.
+        // Don't return; instead, let the next block handle it.
+        let instruction = item.getReplacement(currentDepth);
 
-        // We don't return the DUP. Instead, we set item to be the DUP
-        // so it'll get processed like normal in the block below.
-        item = Instruction["DUP" + dupNumber];
-        addionionalDupsThisAction += 1;
+        item = instruction;
       } 
 
       if (item instanceof Instruction) {
@@ -236,27 +233,11 @@ export class ActionProcessor {
         // Use Array here to do something N times as a one-liner
         [...Array(removed)].forEach(() => stack.shift());
         [...Array(added)].forEach(() => stack.unshift(new StackReference()));
-      
-        // If this is a swap, process the swap on the stack
-        if (instruction.code >= 0x90 && instruction.code <= 0x9F) {
-          let swapIndex = instruction.code - 0x8F; // e.g., if SWAP1/0x90, will return reference at index 1
-          
-          if (swapIndex >= stack.length) {
-            throw new Error("Cannot execute SWAP" + swapIndex + ": swap index out of range");
-          }
-
-          let top = stack[0];
-          let toSwap = stack[swapIndex]; 
-
-          stack[0] = toSwap;
-          stack[swapIndex] = top; 
-        }
       }
 
       // If this is the last instruction of the action, save a shallow copy to stack history.
       if (itemIndex + 1 >= this.intermediate.length || this.parentActionIndexes[itemIndex + 1] != currentActionIndex) {
         this.stackHistory[currentActionIndex] = [...stack];
-        addionionalDupsThisAction = 0; 
       }
       
       return item;

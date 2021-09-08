@@ -226,13 +226,52 @@ export class RelativeStackReference extends Hexable {
 
   // Not sure if the following are needed; here as a guard.
   toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
-    throw new Error("FATAL ERROR: Stack references should never be converted to hex. Instead, they should have been replaced with DUPs during processing.");
+    throw new Error("FATAL ERROR: Attempting to convert raw relative stack reference to hex. Should have been previously converted/replaced with StackReference class.");
   }
 
   byteLength():number {
     return 1; // This will ultimately be replaced by a DUP.   
   }
+
+  getReplacement(depth:number):Instruction {
+    throw new Error("FATAL ERROR: Attempting to replace a raw relative stack reference. Should have been previously converted/replaced with a proper StackReference class.");
+  }
 }
+
+export class DupStackReference extends RelativeStackReference {
+  constructor(action:Action, index:number) {
+    super(action, index);
+  } 
+
+  getReplacement(depth:number):Instruction {
+    // We add one because DUP1 is the top (index 0)
+    let dupNumber = depth + 1;
+    return Instruction["DUP" + dupNumber];
+  }
+
+  static from(relativeStackReference:RelativeStackReference) {
+    return new DupStackReference(relativeStackReference.action, relativeStackReference.index);
+  }
+}
+
+export class SwapStackReference extends RelativeStackReference {
+  constructor(action:Action, index:number) {
+    super(action, index);
+  } 
+
+  getReplacement(depth:number):Instruction {
+    // Note that unlike DupStackReference, we don't add 1 here
+    // because N in SwapN always matches the 0-based index (depth)
+    // of the value being swapped. 
+    return Instruction["SWAP" + depth];
+  }
+
+  static from(relativeStackReference:RelativeStackReference) {
+    return new SwapStackReference(relativeStackReference.action, relativeStackReference.index);
+  }
+}
+
+
 
 export class StackReference extends Hexable {
   static nextIndex = 0;
@@ -247,7 +286,7 @@ export class StackReference extends Hexable {
 
   // Not sure if the following are needed; here as a guard.
   toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
-    throw new Error("FATAL ERROR: Stack references should never be converted to hex. Instead, they should have been replaced with DUPs during processing.");
+    throw new Error("FATAL ERROR: Attempting to convert raw stack reference to hex. Should have been previously converted/replaced with an Instruction or proper StackReference class.");
   }
 
   byteLength():number {

@@ -15,7 +15,9 @@ import {
   Action,
   Instruction,
   RelativeStackReference,
-  ActionParameter
+  ActionParameter,
+  DupStackReference,
+  SwapStackReference
 } from "./grammar";
 import { byteLength, createActionHandler } from "./helpers";
 import { RuntimeContext } from "./index";
@@ -134,26 +136,40 @@ function allocUnsafe(input:HexableValue) {
   return action;
 }
 
-function allocStack(amount:number) {
-  ensure(amount).isOfType("number")
-
+function allocStack(amountOrStackReference:number|RelativeStackReference) {
   let action = new Action("allocStack");
 
-  for (var i = 0; i < amount; i++) {
+  if (typeof amountOrStackReference == "number") {
+    let amount = amountOrStackReference;
+    for (var i = 0; i < amount; i++) {
+      action.push(
+        // Note: MSTORE gobbles up a value each time
+        Instruction.MSIZE,
+        Instruction.MSTORE
+      )
+    }
+  
+    // Push the length
+    action.push(push(amount * 32));
+
     action.push(
-      // Note: MSTORE gobbles up a value each time
+      // Calculate the start offset by length from the current free memory index
+      Instruction.DUP1,   
       Instruction.MSIZE,
-      Instruction.MSTORE
+      Instruction.SUB
+    )
+  } else if (amountOrStackReference instanceof RelativeStackReference) {
+    let stackReference = amountOrStackReference;
+
+    action.push(
+      Instruction.MSIZE,
+      DupStackReference.from(stackReference),
+      Instruction.MSIZE,  // This cheaper or as cheap as a dup? 
+      Instruction.MSTORE,
+      push(32),           // push the length (exactly 32 because its a single stack item)
+      Instruction.SWAP1   // swap MSIZE and 32
     )
   }
-
-  action.push(push(amount * 32))
-  action.push(
-    // Calculate the start offset by length from the current free memory index
-    Instruction.DUP1,   
-    Instruction.MSIZE,
-    Instruction.SUB
-  )
 
   return action;
 }
@@ -372,8 +388,49 @@ function bail() {
   return action;
 }
 
+function set(...args:ActionParameter[]) {
+  ensure(args.length).toBeGreaterThanOrEqual(1);
+  ensure(args.length).toBeLessThanOrEqual(2);
 
-export function createDefaultAction(name:string, instruction:Instruction, swapBeforeInstruction:boolean = false) {
+  let action = new Action("set");
+
+  if (args.length == 2) {
+    _handleParameter(action, args[1]);
+  }
+
+  let stackReference = args[0];
+
+  if (!(stackReference instanceof RelativeStackReference)) {
+    throw new Error("set() expects the first parameter to always be a stack reference.");
+  }
+
+  action.push(
+    SwapStackReference.from(stackReference),
+    Instruction.POP
+  )
+
+  return action;
+}
+
+function _handleParameter(action:Action, item:ActionParameter) {
+  if (item instanceof RelativeStackReference) {
+    // Default to a DupStackReference
+    action.push(
+      DupStackReference.from(item)
+    )
+  } else if (item instanceof ActionPointer) {
+    // If we received an ActionPointer as input to a function, 
+    // it means the user is composing functions.
+    // To process correctly, push the action and not the pointer.
+    action.push(item.action);
+  } else {
+    action.push(
+      push(item)
+    )
+  }
+}
+
+export function createDefaultAction(name:string, instruction:Instruction) {
   return function(...args:ActionParameter[])  {
     let action = new Action(name)
 
@@ -381,22 +438,8 @@ export function createDefaultAction(name:string, instruction:Instruction, swapBe
       // Leave stack references alone; otherwise push anything else passed. 
       // Do this in reverse order as later params are lower in the stack.
       args.reverse().forEach((item) => {
-        if (item instanceof RelativeStackReference) {
-          action.push(item)
-        } else if (item instanceof ActionPointer) {
-          // If we received an ActionPointer as input to a function, 
-          // it means the user is composing functions.
-          // To process correctly, push the action and not the pointer.
-          action.push(item.action);
-        } else {
-          action.push(
-            actionFunctions.push(item)
-          )
-        }
+        _handleParameter(action, item)
       })
-      if (swapBeforeInstruction) {
-        action.push(Instruction.SWAP1);
-      }
     }
     action.push(instruction);
 
@@ -464,7 +507,8 @@ export const actionFunctions:Record<string, ActionFunction> = {
   jumpi,
   push,
   pushCallDataOffsets,
-  revert
+  revert,
+  set
 }
 
 specificPushFunctions.forEach((fn, index) => {
