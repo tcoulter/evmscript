@@ -1,6 +1,5 @@
 import expect from "expect";
-import { ActionProcessor, RuntimeContext } from "../src";
-import { Action, ByteRange, Instruction, JumpMap, StackReference, WordRange } from "../src/grammar";
+import { ByteRange, JumpMap, WordRange } from "../src/grammar";
 
 describe('Grammar', () => {
 

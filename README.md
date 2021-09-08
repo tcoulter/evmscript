@@ -29,6 +29,28 @@ mainloop =
 stop()
 ```
 
+Or this: 
+
+```javascript
+$("deployable", true)
+
+// What is the meaning of life, the universe, and everything,
+// and the return value of this code? 
+
+;[$value]   = push(1)
+;[$counter] = push(1)
+
+loop = 
+  add($value, mul(sub($counter, 1), $counter))
+  set($value)
+  set($counter, add($counter, 1))
+  jumpi(loop, lt($counter, 6))
+
+set($value, add($value, 1))
+allocStack($value)
+ret()
+```
+
 
 ## Motivation
 
