@@ -387,6 +387,22 @@ function set(...args:ActionParameter[]) {
   return action;
 }
 
+function dup(input:RelativeStackReference|number) {
+  let action = new Action("dup");
+
+  if (typeof input == "number") {
+    action.push(
+      Instruction["DUP" + input]
+    )
+  } else {
+    action.push(
+      DupStackReference.from(input)
+    )
+  }
+
+  return action;
+}
+
 function _handleParameter(action:Action, item:ActionParameter) {
   if (item instanceof RelativeStackReference) {
     // Default to a DupStackReference
@@ -401,8 +417,8 @@ function _handleParameter(action:Action, item:ActionParameter) {
     // it either means the user is composing functions, or is
     // intending to pass an ActionPointer (say, when using the
     // variable'ified jump syntax). If the current action can
-    // be a parent, then it's not a jump. Otherwise, leave it
-    // alone. 
+    // be a parent, then it's not a jump, so pull out the action.
+    // Otherwise, leave it alone. 
     if (action.isElligableParentOf(item.action)) {
       action.push(item.action);
       return;
@@ -487,6 +503,7 @@ export const actionFunctions:Record<string, ActionFunction> = {
   assertNonPayable,
   bail,
   dispatch,
+  dup,
   insert,
   push,
   pushCallDataOffsets,

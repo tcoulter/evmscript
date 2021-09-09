@@ -450,6 +450,20 @@ describe("Stack References", () => {
         "0x60016002808201"
       )
     })
+
+    it("should properly convert relative stack references passed to the dup() helper", () => {
+      let code = `
+        ;[$val] = push(5)
+        push(3)
+        dup($val)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x6005600381"
+      )
+    })
   })
 })
 
