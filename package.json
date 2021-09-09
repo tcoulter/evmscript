@@ -8,7 +8,7 @@
     "evmscript": "dist/cli.js"
   },
   "scripts": {
-    "prepublish": "npx tsc",
+    "prepublish": "npx tsc && cp ./src/deployer.bytecode ./dist/src/",
     "test": "ts-mocha -p ./tsconfig.json ./test/**/*.spec.ts"
   },
   "author": "Tim Coulter <tim@timothyjcoulter.com>",
