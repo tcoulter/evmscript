@@ -1,5 +1,6 @@
 import expect from "expect";
-import { ByteRange, JumpMap, WordRange } from "../src/grammar";
+import { preprocess } from "../src";
+import { ByteRange, JumpMap, PrunedError, WordRange } from "../src/grammar";
 
 describe('Grammar', () => {
 
@@ -86,6 +87,54 @@ describe('Grammar', () => {
       expect(() => {
         new WordRange(hexData, 5)
       }).toThrowError("WordRange start position longer than input. Received: 5, Actual words: <1");
+    })
+  })
+
+  describe("PrunedError", () => {
+    it("calculates the right line numbers", () => {
+      // We need to preprocess in order to get the right stack
+      // We'll have our script immediately throw an error, which
+      // should get pruned once caught by the preprocessor.
+      //
+      // Note that whitespace and tabbing matter to this test
+      let code = `
+        throw new Error("This is an error.");
+      `
+
+      try {
+        preprocess(code);
+      } catch (e) {
+        expect(e).toBeInstanceOf(PrunedError);
+        let error:PrunedError = e;
+        let [line, column] = error.originalLineAndColumn();
+
+        expect(line).toBe(2);
+        expect(column).toBeUndefined(); // For some reason no column is reported on throw
+      }
+    })
+
+    it("calculates the right line and column numbers when actions are created", () => {
+      let code = `
+        let actionPointer = add(1, 1); // line and column calculated here
+        let prunedError = actionPointer.action.prunedError;
+
+        // This is an extremly hacky way of getting data out
+        // It'll put the data in the bytecode! :joy:
+        let [line, column] = prunedError.originalLineAndColumn();
+
+        // console.log(">>>", line, column);
+
+        push(line)
+        push(column)
+      `
+
+      let bytecode = preprocess(code);
+
+      // Remove the add() call from the beginning
+      let tail = bytecode.replace("0x6001600101", "");
+      expect(tail).toBe(
+        "6002601D" // Two pushes, the first 
+      )
     })
   })
 });

@@ -1,5 +1,6 @@
 import { byteLength, leftPad, POINTER_BYTE_LENGTH, rightPad, translateToBytecode } from "./helpers";
 import { ActionIdToCodeLocation, ExecutedCodeContext } from "./index";
+import os from "os";
 
 export type StackDelta = [number, number];
 
@@ -271,8 +272,6 @@ export class SwapStackReference extends RelativeStackReference {
   }
 }
 
-
-
 export class StackReference extends Hexable {
   static nextIndex = 0;
 
@@ -310,6 +309,12 @@ export class Action extends Hexable {
   pointer:ActionPointer;
   isJumpDestination:boolean = false;
 
+  // This is used to figure out the line and column location
+  // from the calling script. It's a slightly hacky way of 
+  // determining which actions were run first and are not meant 
+  // to be children. 
+  prunedError:PrunedError;
+
   constructor(name:string) {
     super();
     this.name = name;
@@ -321,6 +326,8 @@ export class Action extends Hexable {
     this.stack = new Array(16).fill(0).map((val, index) => new RelativeStackReference(this, index));
 
     Action.nextId += 1;
+
+    this.prunedError = new PrunedError();
   }
 
   setIsJumpDestination() {
@@ -352,6 +359,9 @@ export class Action extends Hexable {
   push(...items:IntermediateRepresentation[]) {
     items.forEach((item) => {
       if (item instanceof Action) {
+        if (!this.isElligableParentOf(item)) {
+          throw new Error("Attempting to pass previously executed action to " + this.name + "(). This may be an error with your code; or it may be an issue with evmscript. Please evaluate your code to determine if any preprocessing variables -- like loop labels -- are being passed inappropriately to " + this.name + "(). When in doubt, use $ptr('label') to jump.")
+        }
         item.parentAction = this;
       }
     })
@@ -360,6 +370,23 @@ export class Action extends Hexable {
 
   pushTail(...items:Action[]) {
     this.tail.push(...items);
+  }
+
+  isElligableParentOf(other:Action) {
+    let [thisLine, thisColumn] = this.originalLineAndColumn();
+    let [otherLine, otherColumn] = other.originalLineAndColumn();
+    
+    if (thisLine < otherLine) {
+      return true;
+    } else if (thisLine > otherLine) {
+      return false;
+    }
+
+    if (thisColumn <= otherColumn) {
+      return true;
+    } 
+
+    return false;
   }
 
   toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string { 
@@ -388,6 +415,10 @@ export class Action extends Hexable {
 
   toString() {
     return "Action(" + this.name + "):" + this.id;
+  }
+
+  originalLineAndColumn() {
+    return this.prunedError.originalLineAndColumn();
   }
 }
 
@@ -593,6 +624,56 @@ export class JumpMap extends Hexable {
   byteLength() {
     let length = this.items.byteLength();
     return length + (32 - (length % 32));
+  }
+}
+
+export class PrunedError extends Error {
+  constructor(message?:string) {
+    super(message);
+
+    // Set the prototype explicitly. Quirk with extending the Error class.
+    // See here: https://stackoverflow.com/questions/41102060/typescript-extending-error-class
+    Object.setPrototypeOf(this, PrunedError.prototype);
+
+    this.pruneStack();
+  }
+
+  pruneStack() {
+    let stackLines = this.stack.split(/\r?\n/);
+    let found = false;
+
+    this.stack = stackLines.filter((line) => {
+      // Note: The [evmscript] suffix is added by the vm during processing.
+      // Errors created outside of a script execution won't include it. 
+      if (!found && line.indexOf("[evmscript]") >= 0) {
+        found = true;
+        return true;
+      }
+      return !found;
+    }).join(os.EOL)
+  }
+
+  originalLineAndColumn():[number, number] {
+    // Example line: 
+    // 
+    //   at bytecode [evmscript]:4:11
+    //
+    // 1) split lines, then 2) get the last line (e.g., reverse and get the first),
+    // then 3) split the last line based on colons, 4) parseInt() and remove non-numbers
+
+    let [line, column] = this.stack.split(/\r?\n/).reverse()[0].split(":")
+      .map<number>((str) => parseInt(str))
+      .filter((num) => !isNaN(num))
+
+    return [line, column];
+  }
+
+  static from(error:Error) {
+    let pruned = new PrunedError(error.message);
+    pruned.name = error.name;
+    pruned.stack = error.stack;
+    pruned.pruneStack();
+    return pruned;
   }
 }
 

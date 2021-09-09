@@ -11,7 +11,6 @@ import {
   SolidityString,
   SolidityTypes,
   ActionPointer,
-  IntermediateRepresentation,
   Action,
   Instruction,
   RelativeStackReference,
@@ -261,30 +260,6 @@ function calldataload(offset:HexableValue, lengthInBytes:number = 32) {
   return action;
 }
 
-function jump(input:HexableValue) {
-  let action = new Action("jump");
-
-  if (typeof input != "undefined") {
-    ensure(input).is32BytesOrLess();
-    action.push(push(input));
-  }
-  action.push(Instruction.JUMP);
-
-  return action;
-}
-
-function jumpi(input:HexableValue) {
-  let action = new Action("jumpi");
-
-  if (typeof input != "undefined") {
-    ensure(input).is32BytesOrLess();
-    action.push(push(input));
-  }
-  action.push(Instruction.JUMPI);
-
-  return action;
-}
-
 function dispatch(mapping:DispatchRecord) {
   let action = new Action("dispatch");
 
@@ -418,16 +393,26 @@ function _handleParameter(action:Action, item:ActionParameter) {
     action.push(
       DupStackReference.from(item)
     )
-  } else if (item instanceof ActionPointer) {
-    // If we received an ActionPointer as input to a function, 
-    // it means the user is composing functions.
-    // To process correctly, push the action and not the pointer.
-    action.push(item.action);
-  } else {
-    action.push(
-      push(item)
-    )
+    return;
   }
+  
+  if (item instanceof ActionPointer) {
+    // If we received an ActionPointer as input to a function, 
+    // it either means the user is composing functions, or is
+    // intending to pass an ActionPointer (say, when using the
+    // variable'ified jump syntax). If the current action can
+    // be a parent, then it's not a jump. Otherwise, leave it
+    // alone. 
+    if (action.isElligableParentOf(item.action)) {
+      action.push(item.action);
+      return;
+    } 
+  } 
+
+  // Made it here? Just push it.
+  action.push(
+    push(item)
+  )
 }
 
 export function createDefaultAction(name:string, instruction:Instruction) {
@@ -503,8 +488,6 @@ export const actionFunctions:Record<string, ActionFunction> = {
   bail,
   dispatch,
   insert,
-  jump,
-  jumpi,
   push,
   pushCallDataOffsets,
   revert,

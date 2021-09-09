@@ -11,7 +11,7 @@ describe("Errors", () => {
     } catch (e) {
       if (e instanceof Error) {
         let lastLine = e.stack.split(/\r?\n/).reverse()[0];
-        expect(lastLine).toContain("at bytecode:1:1");
+        expect(lastLine).toContain("[evmscript]:1:1");
       } else {
         throw new Error("Unknown error received: " + e);
       }

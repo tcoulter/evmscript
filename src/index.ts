@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { actionFunctions, expressionFunctions, contextFunctions } from "./actions";
-import { ActionPointer, Action, IntermediateRepresentation, Instruction, StackReference, RelativeStackReference } from "./grammar";
+import { ActionPointer, Action, IntermediateRepresentation, Instruction, StackReference, RelativeStackReference, PrunedError } from "./grammar";
 import { byteLength, createActionHandler, createContextHandler, createExpressionHandler, translateToBytecode, UserFacingFunction } from './helpers';
 
 export class RuntimeContext {
@@ -15,7 +15,7 @@ export class RuntimeContext {
   }
 }
 
-export type CodeContext = Record<string, UserFacingFunction>;
+export type CodeContext = Record<string, UserFacingFunction|Console>;
 export type ExecutedCodeContext = Record<string, any>;
 
 export type ActionIdToCodeLocation = Record<number, BigInt>;
@@ -26,7 +26,8 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
 
   // Set some custom context functions, taking in what's passed by the user
   let codeContext:CodeContext = {
-    ...extraContext 
+    ...extraContext,
+    console
   }
 
   // Create a prefix for internal functions so there's no collision.
@@ -71,26 +72,14 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
   try {
     // When running runInNewContext, we set the filename if one was passed
     // in, and we start line numbering so that it ignores the preamble.
+    // Note that the [evmscript] suffix is important to code processing.
+    // See how PrunedError is used.
     vm.runInNewContext(code, codeContext, {
-      filename,
+      filename: filename + " [evmscript]",
       lineOffset: (-preamble.split(/\r?\n/).length) + 1
     });
   } catch (e) {
-    // Prune stack beyond bytecode 
-    if (e instanceof Error) {
-      let stackLines = e.stack.split(/\r?\n/);
-      let found = false;
-
-      e.stack = stackLines.filter((line) => {
-        if (!found && line.indexOf("at bytecode") >= 0) {
-          found = true;
-          return true;
-        }
-        return !found;
-      }).join(os.EOL)
-    }
-
-    throw e; 
+    throw PrunedError.from(e);
   } 
 
   // Note: After execution, node can set values of any type to the context,

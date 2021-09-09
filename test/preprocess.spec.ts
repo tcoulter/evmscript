@@ -465,6 +465,22 @@ describe("Composable functions", () => {
       "0x6003600202600501"
     )
   })
+
+  it("places the jumpdest for loops before all child actions", () => {
+    let code = `
+      loop =
+        jumpi($ptr("endloop"), eq(1, 1))
+
+      endloop=
+        stop()
+    `
+
+    let bytecode = preprocess(code);
+
+    expect(bytecode).toBe(
+      "0x5B600160011461000A575B00"
+    )
+  })
 })
 // TODO: Error messages on function sanitization
 // TODO: Error messages when attempting to redefine a built in function
