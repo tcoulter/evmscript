@@ -18,7 +18,7 @@ import {
   DupStackReference,
   SwapStackReference
 } from "./grammar";
-import { byteLength, createActionHandler } from "./helpers";
+import { byteLength } from "./helpers";
 import { RuntimeContext } from "./index";
 import Enc from "@root/encoding";
 import ensure from "./ensure";
@@ -189,6 +189,7 @@ function pushCallDataOffsets(...args:string[]) {
   args.reverse().forEach((typeString, index) => {
     switch(typeString) {
       case SolidityTypes.uint:
+      case SolidityTypes.bytes1:
         // uints are abi encoded simply by its value [uint value, ...]
 
         action.push(
@@ -319,6 +320,25 @@ function revert(input:HexableValue) {
     )));
   } 
   action.push(Instruction.REVERT);
+
+  return action;
+}
+
+function assert(actionPointer:ActionPointer, revertString?:HexableValue) {
+  let action = new Action("assert");
+
+  let skipRevert = new Action("assert:skipRevert");
+  skipRevert.setIsJumpDestination();
+  let skipRevertPtr = skipRevert.getPointer();
+
+  action.push(
+    action.isElligableParentOf(actionPointer.action) ? actionPointer.action : actionPointer.action,
+    Instruction.PUSH2,
+    skipRevertPtr,
+    Instruction.JUMPI,
+    typeof revertString != "undefined" ? revert(revertString) : bail(),
+    skipRevert
+  )
 
   return action;
 }
@@ -500,6 +520,7 @@ export const actionFunctions:Record<string, ActionFunction> = {
   alloc,
   allocStack,
   allocUnsafe,
+  assert,
   assertNonPayable,
   bail,
   dispatch,
