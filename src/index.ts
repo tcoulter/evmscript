@@ -205,7 +205,10 @@ export class ActionProcessor {
         let currentDepth = stack.indexOf(realReference);
 
         if (currentDepth < 0) {
-          throw new Error("Stack slot referenced in call to function " + this.actions[currentActionIndex].name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.")
+          let currentAction = this.actions[currentActionIndex];
+          let error = PrunedError.from(currentAction.prunedError);
+          error.message = "Stack slot referenced in call to function " + this.actions[currentActionIndex].name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.";
+          throw error;
         }
 
         // Replace the stack reference with the correct instruction.
