@@ -241,6 +241,23 @@ describe('Action Functions', function() {
         "0x6022597F1000111122223333444455556666777788889999AAAABBBBCCCCDDDDEEEEFFFF595261000060F01B5952"
       )
     })
+  });
+
+  describe("calldataload()", () => {
+    it("should treat the second parameter passed to calldataload() as a helpful shift", () => {
+      let code = `
+        // location, byte shift
+        // This means load the value at calldata position 0x04,
+        // then shift it so we only keep 2 bytes
+        calldataload(4, 2)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x60043560F01C"
+      )
+    })
   })
 });
 
@@ -463,6 +480,66 @@ describe("Stack References", () => {
       expect(bytecode).toBe(
         "0x6005600381"
       )
+    })
+
+    // it("should properly convert relative stack references")
+
+    it("should error when trying to dup a stack reference that's too deep", () => {
+      let code = `
+        ;[$val0] = push(0)
+        ;[$val1] = push(1)
+        ;[$val2] = push(2)
+        ;[$val3] = push(3)
+        ;[$val4] = push(4)
+        ;[$val5] = push(5)
+        ;[$val6] = push(6)
+        ;[$val7] = push(7)
+        ;[$val8] = push(8)
+        ;[$val9] = push(9)
+        ;[$valA] = push(10)
+        ;[$valB] = push(11)
+        ;[$valC] = push(12)
+        ;[$valD] = push(13)
+        ;[$valE] = push(14)
+        ;[$valF] = push(15)
+        ;[$val10] = push(16) // This puts $val0 out of range of a DUP
+
+        // This should throw. $val0 is too deep
+        add($val0, 1)
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).toThrowError("Stack reference from push() is too deep; cannot use DUP" /* partial message check */);
+    })
+
+    it("should error when trying to swap a stack reference that's too deep", () => {
+      let code = `
+        ;[$val0] = push(0)
+        ;[$val1] = push(1)
+        ;[$val2] = push(2)
+        ;[$val3] = push(3)
+        ;[$val4] = push(4)
+        ;[$val5] = push(5)
+        ;[$val6] = push(6)
+        ;[$val7] = push(7)
+        ;[$val8] = push(8)
+        ;[$val9] = push(9)
+        ;[$valA] = push(10)
+        ;[$valB] = push(11)
+        ;[$valC] = push(12)
+        ;[$valD] = push(13)
+        ;[$valE] = push(14)
+        ;[$valF] = push(15)
+        ;[$val10] = push(16) // This puts $val0 out of range of a DUP
+
+        // This should throw. $val0 is too deep
+        set($val0, 1)
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).toThrowError("Stack reference from push() is too deep; cannot use SWAP" /* partial message check */);
     })
   })
 })

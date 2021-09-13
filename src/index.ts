@@ -183,12 +183,12 @@ export class ActionProcessor {
   }
 
   processStack() {
-    let currentActionIndex:number = 0;
     let stack:StackReference[] = [];
   
     this.intermediate = this.intermediate.map((item:IntermediateRepresentation, itemIndex:number) => {
-      currentActionIndex = this.parentActionIndexes[itemIndex];
-
+      let currentActionIndex = this.parentActionIndexes[itemIndex];
+      let currentAction = this.actions[currentActionIndex];
+      
       // Convert stack references to DUPs, and then process the dup as a 
       // normal instruction.
       if (item instanceof RelativeStackReference) {
@@ -205,17 +205,25 @@ export class ActionProcessor {
         let currentDepth = stack.indexOf(realReference);
 
         if (currentDepth < 0) {
-          let currentAction = this.actions[currentActionIndex];
           let error = PrunedError.from(currentAction.prunedError);
-          error.message = "Stack slot referenced in call to function " + this.actions[currentActionIndex].name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.";
+          error.message = "Stack slot referenced in call to function " + currentAction.name + "() won't exist on the stack during runtime. Check instructions and ensure the slot hasn't been previously consumed.";
           throw error;
         }
 
         // Replace the stack reference with the correct instruction.
         // Don't return; instead, let the next block handle it.
-        let instruction = item.getReplacement(currentDepth);
-
-        item = instruction;
+        // 
+        // Also make sure to catch stack reference replacement errors and 
+        // return useful data about where the replacement error is occurring.
+        // I *should* be able to use PrunedError.from() like above but
+        // it doesn't appear to be working. So the below code is kindof
+        // a cop out (that works). 
+        try {
+          item = item.getReplacement(currentDepth);
+        } catch (e) {
+          e.message = "in " + currentAction.name + "():" + currentAction.originalLineAndColumn().join(":") + " -- " + e.message
+          throw e;
+        }
       } 
 
       if (item instanceof Instruction) {

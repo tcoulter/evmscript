@@ -173,54 +173,89 @@ function allocStack(amountOrStackReference:number|RelativeStackReference) {
   return action;
 }
 
-function pushCallDataOffsets(...args:string[]) {
+function _handleCallDataType(typeString:SolidityTypes, action:Action) {
+  switch(typeString) {
+    case SolidityTypes.uint:
+      // uints are abi encoded simply by its value [uint value, ...]
+
+      action.push(
+        Instruction.DUP1,           // Copy the calldata offset
+        Instruction.CALLDATALOAD,   // Load the value of the uint
+        Instruction.SWAP1,          // Swap the value and the existing offset
+      )
+      break;
+    case SolidityTypes.bytes: 
+      // bytes is abi encoded as [bytes calldata location, ..., bytes length, bytes data]
+      // where `bytes length` is located at the bytes calldata location.
+
+      // TODO: See if I can make this more efficent with less swapping
+      action.push(
+        Instruction.DUP1,           // Copy the calldata offset                           => [calldata offset, calldata offset, ...]
+        Instruction.CALLDATALOAD,   // Load the location of the bytes array in call data  => [location, calldata offset, ...]
+        Instruction.PUSH1,          // Add 4 to location to account for function id       => [location, calldata offset, ...]
+        0x4,
+        Instruction.ADD,
+        Instruction.SWAP1,          // Swap location and calldata offset                  => [calldata offset, location, ...]
+        Instruction.DUP2,           // Copy the location                                  => [location, calldata offset, location, ...]
+        Instruction.CALLDATALOAD,   // Use the location to load the length of the array   => [length, calldata offset, location, ...]
+        Instruction.SWAP2,          // Swap length and location                           => [location, calldata offset, length, ...]
+        Instruction.PUSH1,          // Add 32 to the location, giving the start of data   => [data start, calldata offset, length, ...]
+        0x20,
+        Instruction.ADD,
+        Instruction.SWAP1           // Finally, swap data start and calldata offset       => [calldata offset, data start, length, ...]
+                                    // leaving the existing offset at the top of the stack
+      )
+      break;
+  }
+}
+
+function pushCallDataOffsets(...args:SolidityTypes[]) {
   args.forEach((typeString) => ensure(typeString).isSolidityType());
 
   let action = new Action("pushCallDataOffsets");
 
   // Loop through items placing ([value,...] | [offset, length, ...])
+  // on the stack in the order they appear in call data (right most 
+  // item because topmost on the stack).
+
+  action.push(
+    push(4)
+  )
+
+  args.forEach((typeString, index) => {
+    _handleCallDataType(typeString, action);
+
+    if (index < args.length - 1) {
+      action.push(
+        Instruction.PUSH1, // Add 32 to the offset, moving to the next item
+        0x20,
+        Instruction.ADD
+      )
+    }
+  })
+
+  // Clean up the last calldata offset
+  action.push(Instruction.POP);
+
+  return action;
+}
+
+function pushCallDataOffsetsReverse(...args:SolidityTypes[]) {
+  args.forEach((typeString) => ensure(typeString).isSolidityType());
+
+  let action = new Action("pushCallDataOffsetsReverse");
+
+  // Loop through items placing ([value,...] | [offset, length, ...])
   // on the stack in reverse order, so the first item is at the top of the stack.
   // This ensures that you don't have to change code when new values are added later 
+  // TODO: Is this comment still true? That's what stack references are for.
 
   action.push(
     push(4 + (32 * (args.length - 1)))
   ); // Start at the last item
 
   args.reverse().forEach((typeString, index) => {
-    switch(typeString) {
-      case SolidityTypes.uint:
-      case SolidityTypes.bytes1:
-        // uints are abi encoded simply by its value [uint value, ...]
-
-        action.push(
-          Instruction.DUP1,           // Copy the calldata offset
-          Instruction.CALLDATALOAD,   // Load the value of the uint
-          Instruction.SWAP1,          // Swap the value and the existing offset
-        )
-        break;
-      case SolidityTypes.bytes: 
-        // bytes is abi encoded as [bytes calldata location, ..., bytes length, bytes data]
-        // where `bytes length` is located at the bytes calldata location.
-
-        // TODO: See if I can make this more efficent with less swapping
-        action.push(
-          Instruction.DUP1,           // Copy the calldata offset                           => [calldata offset, calldata offset, ...]
-          Instruction.CALLDATALOAD,   // Load the location of the bytes array in call data  => [location, calldata offset, ...]
-          Instruction.PUSH1,          // Add 4 to location to account for function id       => [location, calldata offset, ...]
-          0x4,
-          Instruction.ADD,
-          Instruction.SWAP1,          // Swap location and calldata offset                  => [calldata offset, location, ...]
-          Instruction.DUP2,           // Copy the location                                  => [location, calldata offset, location, ...]
-          Instruction.CALLDATALOAD,   // Use the location to load the length of the array   => [length, calldata offset, location, ...]
-          Instruction.SWAP2,          // Swap length and location                           => [location, calldata offset, length, ...]
-          Instruction.PUSH1,          // Add 32 to the location, giving the start of data   => [data start, calldata offset, length, ...]
-          0x20,
-          Instruction.ADD,
-          Instruction.SWAP1           // Finally, swap data start and calldata offset       => [calldata offset, data start, length, ...]
-                                      // leaving the existing offset at the top of the stack
-        )
-        break;
-    }
+    _handleCallDataType(typeString, action);
 
     if (index < args.length - 1) {
       action.push(
@@ -238,14 +273,15 @@ function pushCallDataOffsets(...args:string[]) {
   return action;
 }
 
-function calldataload(offset:HexableValue, lengthInBytes:number = 32) {
+function calldataload(offset:HexableValue|RelativeStackReference, lengthInBytes:number = 32) {
   let action = new Action("calldataload");
 
   if (typeof offset != "undefined") {
     ensure(lengthInBytes).toBeLessThanOrEqual(32);
 
+    _handleParameter(action, offset);
+
     action.push(
-      push(offset), 
       Instruction.CALLDATALOAD
     )
 
@@ -523,11 +559,13 @@ export const actionFunctions:Record<string, ActionFunction> = {
   assert,
   assertNonPayable,
   bail,
+  calldataload,
   dispatch,
   dup,
   insert,
   push,
   pushCallDataOffsets,
+  pushCallDataOffsetsReverse,
   revert,
   set
 }

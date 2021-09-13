@@ -247,7 +247,13 @@ export class DupStackReference extends RelativeStackReference {
   getReplacement(depth:number):Instruction {
     // We add one because DUP1 is the top (index 0)
     let dupNumber = depth + 1;
-    return Instruction["DUP" + dupNumber];
+    let instruction = Instruction["DUP" + dupNumber];
+
+    if (typeof instruction == "undefined") {
+      throw new Error("Stack reference from " + this.action.name + "() is too deep; cannot use DUP. Please make sure the stack reference is within 16 slots from the top of the stack."); 
+    }
+
+    return instruction;
   }
 
   static from(relativeStackReference:RelativeStackReference) {
@@ -264,7 +270,13 @@ export class SwapStackReference extends RelativeStackReference {
     // Note that unlike DupStackReference, we don't add 1 here
     // because N in SwapN always matches the 0-based index (depth)
     // of the value being swapped. 
-    return Instruction["SWAP" + depth];
+    let instruction = Instruction["SWAP" + depth];
+
+    if (typeof instruction == "undefined") {
+      throw new Error("Stack reference from " + this.action.name + "() is too deep; cannot use SWAP. Please make sure the stack reference is within 16 slots from the top of the stack."); 
+    }
+
+    return instruction;
   }
 
   static from(relativeStackReference:RelativeStackReference) {
@@ -323,6 +335,9 @@ export class Action extends Hexable {
     this.tail = [];
     
     // Fill the stack up with relative stack references.
+    // We assume here that no human is going to have stack references
+    // more than 16 values deep. If so, we may need to change the
+    // algo here. 
     this.stack = new Array(16).fill(0).map((val, index) => new RelativeStackReference(this, index));
 
     Action.nextId += 1;
