@@ -1,3 +1,5 @@
+**CAUTION:** This project is in very active development. Please use, but be ready for changes!
+
 # evmscript
 
 Write assembly language applications for the EVM (and EVM-enabled blockchains) using Javascript! 
