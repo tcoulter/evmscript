@@ -1,6 +1,6 @@
 import expect from "expect";
-import { preprocess } from "../src";
-import { ByteRange, JumpMap, PrunedError, WordRange } from "../src/grammar";
+import { ActionProcessor, preprocess } from "../src";
+import { Action, ByteRange, Instruction, JumpMap, PrunedError, WordRange } from "../src/grammar";
 
 describe('Grammar', () => {
 
@@ -137,4 +137,63 @@ describe('Grammar', () => {
       )
     })
   })
-});
+
+  // Not sure if this is the right spot for this test
+  describe("ActionProcessor", () => {
+    it("swaps the correct stack references when a SWAP is processed", () => {
+      let pushAction = new Action("push"); 
+      pushAction.intermediate.push(Instruction.PUSH1, 0x1);
+
+      let secondPushAction = new Action("push1");
+      secondPushAction.intermediate.push(Instruction.PUSH1, 0x2); 
+
+      let swapAction = new Action("swap1"); 
+      swapAction.intermediate.push(Instruction.SWAP1); 
+
+      let actions = [
+        pushAction,
+        secondPushAction,
+        swapAction
+      ];
+
+      let actionProcessor:ActionProcessor = new ActionProcessor(actions, {});
+
+      actionProcessor.processActions();
+      actionProcessor.processStack();
+
+      let beforeSwap = actionProcessor.stackHistory[1];
+      let afterSwap = actionProcessor.stackHistory[2];
+
+      let [expectedRef2, expectedRef1] = beforeSwap;
+      let [actualRef1, actualRef2] = afterSwap;
+
+      expect(actualRef1).toBe(expectedRef1);
+      expect(actualRef2).toBe(expectedRef2);
+
+      // Just to be doubly sure
+      expect(actualRef1).not.toBe(expectedRef2);
+      expect(actualRef2).not.toBe(expectedRef1);
+    })
+
+    it("errors when swapping too deeply", () => {
+      let pushAction = new Action("push"); 
+      pushAction.intermediate.push(Instruction.PUSH1, 0x1);
+
+      let swapAction = new Action("swap1"); 
+      swapAction.intermediate.push(Instruction.SWAP1); 
+
+      let actions = [
+        pushAction,
+        swapAction
+      ];
+
+      let actionProcessor:ActionProcessor = new ActionProcessor(actions, {});
+
+      actionProcessor.processActions();
+
+      expect(() => {
+        actionProcessor.processStack();
+      }).toThrowError("Cannot execute SWAP1: swap index out of range");
+    })
+  })
+})

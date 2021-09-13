@@ -16,7 +16,8 @@ import {
   RelativeStackReference,
   ActionParameter,
   DupStackReference,
-  SwapStackReference
+  SwapStackReference,
+  HotSwapStackReference
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from "./index";
@@ -436,7 +437,7 @@ function set(...args:ActionParameter[]) {
   }
 
   action.push(
-    SwapStackReference.from(stackReference),
+    HotSwapStackReference.from(stackReference),
     Instruction.POP
   )
 

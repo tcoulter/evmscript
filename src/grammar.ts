@@ -190,6 +190,10 @@ export class Instruction extends Hexable {
   toHex(executedCodeContext:ExecutedCodeContext={}, codeLocations:ActionIdToCodeLocation={}) {
     return BigInt(this.code).toString(16)
   }
+
+  isSwap() {
+    return this.code >= Instruction.SWAP1.code && this.code <= Instruction.SWAP16.code
+  }
 }
 
 export enum SolidityTypes {
@@ -281,6 +285,14 @@ export class SwapStackReference extends RelativeStackReference {
 
   static from(relativeStackReference:RelativeStackReference) {
     return new SwapStackReference(relativeStackReference.action, relativeStackReference.index);
+  }
+}
+
+// Here to signal to the preprocessor not to swap the stack references
+// during the swap action. 
+export class HotSwapStackReference extends SwapStackReference {
+  static from(relativeStackReference:RelativeStackReference) {
+    return new HotSwapStackReference(relativeStackReference.action, relativeStackReference.index);
   }
 }
 

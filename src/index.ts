@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { actionFunctions, expressionFunctions, contextFunctions } from "./actions";
-import { ActionPointer, Action, IntermediateRepresentation, Instruction, StackReference, RelativeStackReference, PrunedError } from "./grammar";
+import { ActionPointer, Action, IntermediateRepresentation, Instruction, StackReference, RelativeStackReference, PrunedError, HotSwapStackReference } from "./grammar";
 import { byteLength, createActionHandler, createContextHandler, createExpressionHandler, translateToBytecode, UserFacingFunction } from './helpers';
 
 export class RuntimeContext {
@@ -186,9 +186,13 @@ export class ActionProcessor {
     let stack:StackReference[] = [];
   
     this.intermediate = this.intermediate.map((item:IntermediateRepresentation, itemIndex:number) => {
+      // Make a copy so we can see what was passed in during the second block, 
+      // as it may be manipulated by the first block. 
+      let original = item; 
+
       let currentActionIndex = this.parentActionIndexes[itemIndex];
       let currentAction = this.actions[currentActionIndex];
-      
+
       // Convert stack references to DUPs, and then process the dup as a 
       // normal instruction.
       if (item instanceof RelativeStackReference) {
@@ -230,7 +234,24 @@ export class ActionProcessor {
         let instruction = item;
         let [removed, added] = instruction.stackDelta();
 
-        // Use Array here to do something N times as a one-liner
+        // If we have a swap instruction, and it wasn't a hot swap, 
+        // then process the swap on the stack
+        if (instruction.isSwap() && !(original instanceof HotSwapStackReference))  {
+          // Get the array index of the swap value. e.g., if SWAP1/0x90, this will return reference at index 1
+          let swapIndex = instruction.code - Instruction.SWAP1.code + 1; 
+
+          if (swapIndex >= stack.length) {
+            throw new Error("Cannot execute SWAP" + swapIndex + ": swap index out of range");
+          }
+
+          let top = stack[0];
+          let toSwap = stack[swapIndex]; 
+
+          stack[0] = toSwap;
+          stack[swapIndex] = top; 
+        }
+
+        // Use ...Array here to do something N times as a one-liner
         [...Array(removed)].forEach(() => stack.shift());
         [...Array(added)].forEach(() => stack.unshift(new StackReference()));
       }
