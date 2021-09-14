@@ -251,7 +251,7 @@ export class ActionProcessor {
           stack[swapIndex] = top; 
         }
 
-        // Use ...Array here to do something N times as a one-liner
+        // Use ...Array() here to do something N times as a one-liner
         [...Array(removed)].forEach(() => stack.shift());
         [...Array(added)].forEach(() => stack.unshift(new StackReference()));
       }

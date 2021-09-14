@@ -241,7 +241,73 @@ describe('Action Functions', function() {
         "0x6022597F1000111122223333444455556666777788889999AAAABBBBCCCCDDDDEEEEFFFF595261000060F01B5952"
       )
     })
+
+    it("shouldn't push offsets to the stack if second parameter is false", () => {
+      let code = `
+        alloc(0x1, false)
+      `
+
+      let bytecode = preprocess(code);
+
+      // Note that in this case, the input is less than 32 bytes, 
+      // so a separate algorithm is used to push the data
+      expect(bytecode).toBe(
+        "0x600160F81B5952"
+      )
+    })
   });
+
+  describe("allocStack()", () => {
+    it("should alloc N items from the stack into memory if a number is passed in", () => {
+      let code = `
+        allocStack(3)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x5952595259526060805903"
+      )
+    })
+
+    it("should alloc N items from the stack into memory if a number is passed in, but not push offsets if second parameter is false", () => {
+      let code = `
+        allocStack(3, false)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x595259525952"
+      )
+    })
+
+    it("should alloc a stack reference if a stack reference is passed in", () => {
+      let code = `
+        ;[$val] = push(0)
+        allocStack($val)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x600059815952602090"
+      )
+    })
+
+    it("should alloc a stack reference if a stack reference is passed in, but not push offsets if second parameter is false", () => {
+      let code = `
+        ;[$val] = push(0)
+        allocStack($val, false)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x6000805952"
+      )
+    })
+  })
 
   describe("calldataload()", () => {
     it("should treat the second parameter passed to calldataload() as a helpful shift", () => {

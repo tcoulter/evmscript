@@ -74,15 +74,17 @@ let specificPushFunctions:Array<ActionFunction> =  Array.from(Array(32).keys()).
 })
 
 // push input to stack in word by word and load into memory 
-function alloc(input:HexableValue) {
+function alloc(input:HexableValue, pushOffsets = true) {
   let length = byteLength(input);
   let wordIndex = 0;
 
   let action = new Action("alloc");
 
-  // Leave [offset, length,...] at the top of the stack
-  action.push(push(length));
-  action.push(Instruction.MSIZE)                                    
+  if (pushOffsets == true) {
+    // Leave [offset, length,...] at the top of the stack
+    action.push(push(length));
+    action.push(Instruction.MSIZE)       
+  }                             
 
   do {
     // If we don't have a full word, use a byte range and shift
@@ -136,7 +138,7 @@ function allocUnsafe(input:HexableValue) {
   return action;
 }
 
-function allocStack(amountOrStackReference:number|RelativeStackReference) {
+function allocStack(amountOrStackReference:number|RelativeStackReference, pushOffsets = true) {
   let action = new Action("allocStack");
 
   if (typeof amountOrStackReference == "number") {
@@ -149,26 +151,38 @@ function allocStack(amountOrStackReference:number|RelativeStackReference) {
       )
     }
   
-    // Push the length
-    action.push(push(amount * 32));
+    if (pushOffsets == true) {
+      // Push the length
+      action.push(push(amount * 32));
 
-    action.push(
-      // Calculate the start offset by length from the current free memory index
-      Instruction.DUP1,   
-      Instruction.MSIZE,
-      Instruction.SUB
-    )
+      action.push(
+        // Calculate the start offset by length from the current free memory index
+        Instruction.DUP1,   
+        Instruction.MSIZE,
+        Instruction.SUB
+      )
+    }
   } else if (amountOrStackReference instanceof RelativeStackReference) {
     let stackReference = amountOrStackReference;
 
+    if (pushOffsets == true) {
+      action.push(
+        Instruction.MSIZE
+      )
+    }
+
     action.push(
-      Instruction.MSIZE,
       DupStackReference.from(stackReference),
-      Instruction.MSIZE,  // This cheaper or as cheap as a dup? 
+      Instruction.MSIZE,   
       Instruction.MSTORE,
-      push(32),           // push the length (exactly 32 because its a single stack item)
-      Instruction.SWAP1   // swap MSIZE and 32
     )
+
+    if (pushOffsets == true) {
+      action.push(
+        push(32),           // push the length (exactly 32 because its a single stack item)
+        Instruction.SWAP1   // swap initial MSIZE and 32
+      )
+    }
   }
 
   return action;
