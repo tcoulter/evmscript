@@ -156,7 +156,7 @@ describe('Grammar', () => {
         swapAction
       ];
 
-      let actionProcessor:ActionProcessor = new ActionProcessor(actions, {});
+      let actionProcessor:ActionProcessor = new ActionProcessor(actions, [], {});
 
       actionProcessor.processActions();
       actionProcessor.processStack();
@@ -187,7 +187,7 @@ describe('Grammar', () => {
         swapAction
       ];
 
-      let actionProcessor:ActionProcessor = new ActionProcessor(actions, {});
+      let actionProcessor:ActionProcessor = new ActionProcessor(actions, [], {});
 
       actionProcessor.processActions();
 

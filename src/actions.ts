@@ -17,7 +17,9 @@ import {
   ActionParameter,
   DupStackReference,
   SwapStackReference,
-  HotSwapStackReference
+  HotSwapStackReference,
+  TailAction,
+  IntermediateRepresentation
 } from "./grammar";
 import { byteLength } from "./helpers";
 import { RuntimeContext } from "./index";
@@ -25,7 +27,8 @@ import Enc from "@root/encoding";
 import ensure from "./ensure";
 import { ethers } from "ethers";
 
-export type ActionFunction = (...args: Expression[]) => Action;
+export type ActionFunction = (...args: Expression[]) => Action|Action[];
+export type ContextualActionFunction = (context:RuntimeContext, ...args: Expression[]) => Action|Action[];
 export type ExpressionFunction = (...args: Expression[]) => HexableValue;
 export type ContextFunction = (context:RuntimeContext, ...args: Expression[]) => void;
 
@@ -117,7 +120,7 @@ function allocUnsafe(input:HexableValue) {
 
   let action = new Action("allocUnsafe");
 
-  let inputStart = new Action("allocUnsafe:inputStart");
+  let inputStart = new TailAction("allocUnsafe:inputStart");
   let inputStartPtr = inputStart.getPointer();
   inputStart.push(input);
 
@@ -131,11 +134,7 @@ function allocUnsafe(input:HexableValue) {
     Instruction.CODECOPY   // Copy code into memory     
   )
 
-  // Add input at the end of the bytecode, as an action
-  // so it can be pointed to in the code above.
-  action.pushTail(inputStart)
-
-  return action;
+  return [action, inputStart];
 }
 
 function allocStack(amountOrStackReference:number|RelativeStackReference, pushOffsets = true) {
@@ -302,7 +301,7 @@ function calldataload(offset:HexableValue|RelativeStackReference, lengthInBytes:
 
     if (lengthInBytes != 32) {
       action.push(
-        actionFunctions.shr((32 - lengthInBytes) * 8)
+        actionFunctions.shr((32 - lengthInBytes) * 8) as Action
       )
     }
   } else {
@@ -502,8 +501,8 @@ function _handleParameter(action:Action, item:ActionParameter) {
   )
 }
 
-export function createDefaultAction(name:string, instruction:Instruction) {
-  return function(...args:ActionParameter[])  {
+function createDefaultAction(name:string, instruction:Instruction) {
+  return function(...args:ActionParameter[]):Action  {
     let action = new Action(name)
 
     if (args.length > 0) {
@@ -517,6 +516,51 @@ export function createDefaultAction(name:string, instruction:Instruction) {
 
     return action;
   }
+}
+
+// This function is kinda sketchy because it edits the
+// runtime context's actions array. It's all self contained
+// though, so hopefully that's fine. 
+function method(context:RuntimeContext, fn:() => void) {
+  let action = new TailAction("method");
+
+  // Record the length of the actions list before
+  // running the method function.
+  let startingIndex = context.actions.length;
+
+  // Run the function, which will push things onto the main actions list
+  fn();
+
+  // Cut out the newly added stuff and make it a child
+  // of the method action. 
+  action.push(...context.actions.splice(startingIndex))
+
+  // Get the last instruction, no matter how deep we have to go
+  let lastInstruction:IntermediateRepresentation = action;
+
+  while (lastInstruction instanceof Action) {
+    lastInstruction = lastInstruction.intermediate[lastInstruction.intermediate.length - 1];
+  }
+
+  if (!(lastInstruction instanceof Instruction) || (
+    lastInstruction != Instruction.JUMP 
+    && lastInstruction != Instruction.REVERT
+    && lastInstruction != Instruction.RETURN
+  )) {
+    throw new Error("To maintain proper control flow, the last instruction of a method must be JUMP, RETURN or REVERT.")
+  }
+
+  // Now make sure the method is stack neutral.
+  let [removed, added] = action.stackDelta();
+
+  let diff = (-removed) + added;
+
+  if (diff != 0) {
+    throw new Error("Methods are required to be stack neutral. This method's stack size diff is: " 
+      + (diff > 0 ? "+" : "") + diff + " stack items");
+  }
+
+  return action;
 }
 
 //// Expression functions
@@ -600,6 +644,10 @@ Object.keys(Instruction)
     let finalKey = reservedWords[lowercaseKey] || lowercaseKey
     actionFunctions[finalKey] = createDefaultAction(finalKey, Instruction[key]);
   })
+
+export const contextualActionFunctions:Record<string, ContextualActionFunction> = {
+  method
+}
 
 export const expressionFunctions:Record<string, ExpressionFunction> = {
   $bytelen,

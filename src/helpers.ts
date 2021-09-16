@@ -1,4 +1,4 @@
-import { ActionFunction, ContextFunction, ExpressionFunction } from "./actions";
+import { ActionFunction, ContextFunction, ContextualActionFunction, ExpressionFunction } from "./actions";
 import { Action, ActionPointer, Expression, Hexable, Instruction, IntermediateRepresentation, RelativeStackReference, sanitizeHexStrings, StackReference } from "./grammar";
 import { ActionIdToCodeLocation, ExecutedCodeContext, RuntimeContext } from "./index";
 
@@ -26,13 +26,39 @@ export function byteLength(input:IntermediateRepresentation):number {
 
 export function createActionHandler(runtimeContext:RuntimeContext, key:string, fn:ActionFunction):UserFacingFunction {
   let handler:UserFacingFunction = function(...args:Expression[]) {
-
     args = args.map((input:Expression) => sanitizeHexStrings(input, key));
-    let action:Action = fn(...args); 
+    let actions = fn(...args); 
 
-    runtimeContext.pushAction(action);
+    if (!Array.isArray(actions)) {
+      actions = [actions];
+    }
+
+    runtimeContext.pushActions(...actions);
     
-    return action.getPointer();
+    let firstAction = actions[0];
+    
+    return firstAction.getPointer();
+  }
+
+  return handler;
+}
+
+// The only difference between this and the other one is the function call,
+// passing in the context. Not sure I like it but this is an easy solution.
+export function createContextualActionHandler(runtimeContext:RuntimeContext, key:string, fn:ContextualActionFunction):UserFacingFunction {
+  let handler:UserFacingFunction = function(...args:Expression[]) {
+    args = args.map((input:Expression) => sanitizeHexStrings(input, key));
+    let actions = fn(runtimeContext, ...args); 
+
+    if (!Array.isArray(actions)) {
+      actions = [actions];
+    }
+
+    runtimeContext.pushActions(...actions);
+    
+    let firstAction = actions[0];
+    
+    return firstAction.getPointer();
   }
 
   return handler;

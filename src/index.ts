@@ -2,16 +2,23 @@ import vm from 'vm';
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { actionFunctions, expressionFunctions, contextFunctions } from "./actions";
-import { ActionPointer, Action, IntermediateRepresentation, Instruction, StackReference, RelativeStackReference, PrunedError, HotSwapStackReference } from "./grammar";
-import { byteLength, createActionHandler, createContextHandler, createExpressionHandler, translateToBytecode, UserFacingFunction } from './helpers';
+import { actionFunctions, expressionFunctions, contextFunctions, contextualActionFunctions } from "./actions";
+import { ActionPointer, Action, IntermediateRepresentation, Instruction, StackReference, RelativeStackReference, PrunedError, HotSwapStackReference, TailAction } from "./grammar";
+import { byteLength, createActionHandler, createContextHandler, createContextualActionHandler, createExpressionHandler, translateToBytecode, UserFacingFunction } from './helpers';
 
 export class RuntimeContext {
   deployable: boolean = false;
   actions: Action[] = [];
+  tailActions: Action[] = [];
 
-  pushAction(action:Action) {
-    this.actions.push(action);
+  pushActions(...actions:Action[]) {
+    actions.forEach((action) => {
+      if (action instanceof TailAction) {
+        this.tailActions.push(action);
+      } else {
+        this.actions.push(action);
+      }
+    })
   }
 }
 
@@ -40,6 +47,11 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
   Object.keys(actionFunctions)
     .filter((key) => typeof actionFunctions[key] == "function")
     .map<[string, UserFacingFunction]>((key) => [key, createActionHandler(runtimeContext, key, actionFunctions[key])])
+    .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
+
+  Object.keys(contextualActionFunctions)
+    .filter((key) => typeof contextualActionFunctions[key] == "function")
+    .map<[string, UserFacingFunction]>((key) => [key, createContextualActionHandler(runtimeContext, key, contextualActionFunctions[key])])
     .forEach(([key, fn]) => codeContext[internalFunctionPrefix + key] = fn)
 
   Object.keys(expressionFunctions)
@@ -96,8 +108,8 @@ export function preprocess(code:string, extraContext:Record<string, any> = {}, f
     .map<ActionPointer>((key) => executedCodeContext[key])
     .forEach((actionPointer) => actionPointer.action.setIsJumpDestination())
 
-  // Next, concatenate the intermediate representation and tail data
-  let processor = new ActionProcessor(runtimeContext.actions, executedCodeContext);
+  // Next, process the actions
+  let processor = new ActionProcessor(runtimeContext.actions, runtimeContext.tailActions, executedCodeContext);
   let output = processor.processAll();
 
   // If the code is set to deployable, use our own preprocessor to create
@@ -131,14 +143,10 @@ export class ActionProcessor {
   totalBytesAtInstruction:Array<number>;
   jumpDestinations:ActionIdToCodeLocation = {}
 
-  constructor(actions:Action[], executedCodeContext:ExecutedCodeContext) {
-    // Push any tail actions to the end.
-    this.actions = [...actions];
-    
-    this.actions.forEach((action) => {
-      this.actions.push(...action.tail)
-    })
-
+  constructor(actions:Action[], tailActions:Action[], executedCodeContext:ExecutedCodeContext) {
+    // Merge actions and tailActions into a single array
+    this.actions = [...actions, ...tailActions];
+  
     // Prune actions that are a child of another action
     this.actions = this.actions.filter((action) => typeof action.parentAction == "undefined");
 

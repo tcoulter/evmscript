@@ -325,6 +325,116 @@ describe('Action Functions', function() {
       )
     })
   })
+
+  describe("method()", () => {
+    it("should push code contained in method() to the end", () => {
+      let code = `
+        methodLabel = method(() => {
+          jump($ptr("main"))
+        })
+
+        main = 
+          push(0x1122)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x5B6111225B61000056"
+      )
+    })
+
+    it("should return the right jump location regardless of where the method definition occurs", () => {
+      // This test tests that the jump location used in main
+      // comes later on in the bytecode, which it does, even
+      // though the method definition comes beforehand.
+      
+      let code = `
+        methodLabel = method(() => {
+          jump($ptr("main"))
+        })
+
+        main = 
+          push(methodLabel)
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x5B6100045B61000056"
+      )
+    })
+
+    it("enforces that the last instruction in a method is a jump, return or revert", () => {
+      // Methods are meant to be self contained. Without a jump they 
+      // have ambigous control flow based on the location of the method 
+      // within the bytecode. 
+
+      let code = `
+        methodLabel = method(() => {
+          push(1)
+          pop() // So that we have stack neutrality (see next test)
+        })
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).toThrowError("To maintain proper control flow, the last instruction of a method must be JUMP, RETURN or REVERT");
+    
+      code = `
+        somePointer = 
+          push(1)
+
+        method(() => {
+          jump(somePointer)
+        })
+
+        method(() => {
+          push(1)
+          push(2)
+          ret()
+        })
+
+        method(() => {
+          push(1)
+          push(2)
+          revert()
+        })
+
+        method(() => {
+          revert($hex("some error"))
+        })
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).not.toThrowError();
+    })
+
+    it("enforces stack neutrality; methods need to end with the same stack size so as not to screw up stack references", () => {
+      let code = `
+        method(() => {
+          ret()
+        })
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).toThrowError("Methods are required to be stack neutral. This method's stack size diff is: -2 stack items");
+    
+      code = `
+        method(() => {
+          push(1) // for the ret() action
+          push(2)
+          ret()
+        })
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).not.toThrowError();
+    })
+  })
 });
 
 describe("Expression Functions", () => {

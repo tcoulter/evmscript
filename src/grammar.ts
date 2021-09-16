@@ -7,6 +7,12 @@ export type StackDelta = [number, number];
 export abstract class Hexable {
   abstract toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string;
   abstract byteLength():number;
+
+  stackDelta():StackDelta {
+    // Not everything hexable is something that affects the stack.
+    // We'll add a default value here that objects can override.
+    return [0,0];
+  }
 }
 
 export class Instruction extends Hexable {
@@ -231,11 +237,15 @@ export class RelativeStackReference extends Hexable {
 
   // Not sure if the following are needed; here as a guard.
   toHex(executedCodeContext:ExecutedCodeContext, codeLocations:ActionIdToCodeLocation):string {
-    throw new Error("FATAL ERROR: Attempting to convert raw relative stack reference to hex. Should have been previously converted/replaced with StackReference class.");
+    throw new Error("FATAL ERROR: Attempting to convert raw relative stack reference to hex. Should have been previously converted/replaced with a proper StackReference class.");
   }
 
   byteLength():number {
     return 1; // This will ultimately be replaced by a DUP.   
+  }
+
+  stackDelta():StackDelta {
+    throw new Error("FATAL ERROR: Attempting to get the stack delta of a raw stack reference. Should have been previously converted/replaced with a proper StackReference class.");
   }
 
   getReplacement(depth:number):Instruction {
@@ -312,6 +322,10 @@ export class StackReference extends Hexable {
     throw new Error("FATAL ERROR: Attempting to convert raw stack reference to hex. Should have been previously converted/replaced with an Instruction or proper StackReference class.");
   }
 
+  stackDelta():StackDelta {
+    throw new Error("FATAL ERROR: Attempting to get the stack delta of a raw stack reference. Should have been previously converted/replaced with an Instruction or proper StackReference class.");
+  }
+
   byteLength():number {
     throw new Error("FATAL ERROR: Stack references should never have their length evaluated. If so, it means they haven't been replaced properly.");
   }
@@ -328,7 +342,6 @@ export class Action extends Hexable {
   id:number; 
   parentAction:Action;
   intermediate:IntermediateRepresentation[];
-  tail:Action[];
   stack:RelativeStackReference[];
   pointer:ActionPointer;
   isJumpDestination:boolean = false;
@@ -344,7 +357,6 @@ export class Action extends Hexable {
     this.name = name;
     this.id = Action.nextId;
     this.intermediate = [];
-    this.tail = [];
     
     // Fill the stack up with relative stack references.
     // We assume here that no human is going to have stack references
@@ -361,14 +373,14 @@ export class Action extends Hexable {
     this.isJumpDestination = true;
   }
 
-  getStackDelta():StackDelta {
+  stackDelta():StackDelta {
     let totalRemoved = 0;
     let totalAdded = 0;
     
     this.intermediate
-      .filter((item) => item instanceof Instruction)
-      .forEach((instruction:Instruction) => {
-        let [removed, added] = instruction.stackDelta();
+      .filter((item) => item instanceof Hexable)
+      .forEach((item:Hexable) => {
+        let [removed, added] = item.stackDelta();
         totalRemoved += removed;
         totalAdded += added;
       })
@@ -393,10 +405,6 @@ export class Action extends Hexable {
       }
     })
     this.intermediate.push(...items);
-  }
-
-  pushTail(...items:Action[]) {
-    this.tail.push(...items);
   }
 
   isElligableParentOf(other:Action) {
@@ -446,6 +454,14 @@ export class Action extends Hexable {
 
   originalLineAndColumn() {
     return this.prunedError.originalLineAndColumn();
+  }
+}
+
+// TailAction signals to the processor that this action
+// should be applied to the end of the intermediate representation
+export class TailAction extends Action {
+  toString() {
+    return "TailAction(" + this.name + "):" + this.id;
   }
 }
 
