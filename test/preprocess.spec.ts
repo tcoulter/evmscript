@@ -434,6 +434,25 @@ describe('Action Functions', function() {
         preprocess(code)
       }).not.toThrowError();
     })
+
+    it("should allow stack references within methods", () => {
+      let code = `
+        someLabel = 
+          [$val] = push(1)
+
+        method(() => {
+          add($val, 1)
+          pop() // for stack neutrality
+          jump(someLabel) // for jump constraint
+        })
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x5B6001600181015061000056"
+      )
+    })
   })
 });
 

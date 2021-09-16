@@ -506,9 +506,9 @@ function createDefaultAction(name:string, instruction:Instruction) {
     let action = new Action(name)
 
     if (args.length > 0) {
-      // Leave stack references alone; otherwise push anything else passed. 
-      // Do this in reverse order as later params are lower in the stack.
-      args.reverse().forEach((item) => {
+      // Handle arguments in reverse as that's the order they should be
+      // added to the stack.
+      [...args].reverse().forEach((item) => {
         _handleParameter(action, item)
       })
     }

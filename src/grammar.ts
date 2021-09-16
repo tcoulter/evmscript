@@ -270,6 +270,11 @@ export class DupStackReference extends RelativeStackReference {
     return instruction;
   }
 
+  stackDelta():StackDelta {
+    // Use DUP1 as all DUP's have the same stack effects
+    return Instruction.DUP1.stackDelta();
+  }
+
   static from(relativeStackReference:RelativeStackReference) {
     return new DupStackReference(relativeStackReference.action, relativeStackReference.index);
   }
@@ -291,6 +296,11 @@ export class SwapStackReference extends RelativeStackReference {
     }
 
     return instruction;
+  }
+
+  stackDelta():StackDelta {
+    // Use SWAP1 as all SWAP's have the same stack effects
+    return Instruction.SWAP1.stackDelta();
   }
 
   static from(relativeStackReference:RelativeStackReference) {
