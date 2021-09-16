@@ -128,7 +128,7 @@ export function preprocessFile(inputFile:string, extraContext:Record<string, any
   return preprocess(input, extraContext, inputFile);
 }
 
-export type InstructionIndexToActionIndex = Array<number>;
+export type InstructionIndexToActions = Array<Array<Action>>;
 export type ActionIdToInstructionIndex = Record<number, number>;
 export type StackHistory = Array<StackReference[]>;
 
@@ -136,8 +136,8 @@ export class ActionProcessor {
   actions:Action[];
   executedCodeContext:ExecutedCodeContext;
   intermediate:IntermediateRepresentation[] = [];
-  parentActionIndexes:InstructionIndexToActionIndex = [];
-  actionInstructionStartIndex:ActionIdToInstructionIndex = {};
+  actionStartIndeces:InstructionIndexToActions = [];
+  actionEndIndeces:InstructionIndexToActions = [];
   stackHistory:StackHistory = [];
   bytesPerInstruction:Array<number>;
   totalBytesAtInstruction:Array<number>;
@@ -165,52 +165,77 @@ export class ActionProcessor {
     // Since actions can themselves contain actions, lets flatten array into 
     // a single intermediate representation representing the whole program. 
     let processAction = (action:Action, parentIndex:number) => {
-      // Save the index of intermediate where the action starts
-      this.actionInstructionStartIndex[action.id] = this.intermediate.length;
-      
-      // If it's a jump destintation, insert one. Note that
-      // this instruction gets attributed to the head index.
+      if (!action.isJumpDestination && action.intermediate.length == 0) {
+        throw new Error("Cannot process action: it contains no instructions.")
+      }
+
+      // Now that we know the action has at least one instruction, 
+      // let's set the start index.
+
+      let startIndex = this.intermediate.length;
+
+      if (typeof this.actionStartIndeces[startIndex] == "undefined") {
+        this.actionStartIndeces[startIndex] = [];
+      }
+
+      this.actionStartIndeces[startIndex].push(action);
+
+      // If this action is a jump destintation, insert one. 
       if (action.isJumpDestination) {
-        this.parentActionIndexes[this.intermediate.length] = parentIndex; 
         this.intermediate.push(Instruction.JUMPDEST);
       }
 
-      // Process all instructions of the action, attributing
-      // the instructions to the head action. 
+      // Process all instructions of the action
       action.intermediate.forEach((item) => {
         if (item instanceof Action) {
           processAction(item, parentIndex);
         } else {
-          this.parentActionIndexes[this.intermediate.length] = parentIndex; 
           this.intermediate.push(item);
         }
       })
+
+      let endingIndex = this.intermediate.length - 1;
+
+      if (typeof this.actionEndIndeces[endingIndex] == "undefined") {
+        this.actionEndIndeces[endingIndex] = [];
+      }
+
+      this.actionEndIndeces[endingIndex].push(action)
     }
 
     this.actions.forEach(processAction);
+
+    if (typeof this.actionStartIndeces[0] == "undefined" || typeof this.actionStartIndeces[0][0] == "undefined") {
+      throw new Error("FATAL ERROR: No first action; processActions() created unexpected output.")
+    }
   }
 
   processStack() {
     let stack:StackReference[] = [];
   
+    let actionStack:Array<Action> = [];
+    
     this.intermediate = this.intermediate.map((item:IntermediateRepresentation, itemIndex:number) => {
+      if (typeof this.actionStartIndeces[itemIndex] != "undefined") {
+        actionStack.push(...this.actionStartIndeces[itemIndex]);
+      }
+
+      let currentAction:Action = actionStack[actionStack.length - 1];
+      
       // Make a copy so we can see what was passed in during the second block, 
       // as it may be manipulated by the first block. 
       let original = item; 
 
-      let currentActionIndex = this.parentActionIndexes[itemIndex];
-      let currentAction = this.actions[currentActionIndex];
-
       // Convert stack references to DUPs, and then process the dup as a 
       // normal instruction.
       if (item instanceof RelativeStackReference) {
-        if (currentActionIndex == 0) {
-          throw new Error("FATAL ERROR: unexpected stack reference pointing to first processable action.");
-        }
+        // if (currentActionIndex == 0) {
+        //   throw new Error("FATAL ERROR: unexpected stack reference pointing to first processable action.");
+        // }
 
         // Return a real reference, that's kept the same across actions
         // so long as that stack position isn't consumed. 
-        let realReference = this.stackHistory[this.actions.indexOf(item.action)][item.index];
+        let realReference = this.stackHistory[item.action.id][item.index];
 
         // Look for the reference in the output stack from the last action,
         // as that represents the stack state at the beginning of this action.
@@ -265,8 +290,20 @@ export class ActionProcessor {
       }
 
       // If this is the last instruction of the action, save a shallow copy to stack history.
-      if (itemIndex + 1 >= this.intermediate.length || this.parentActionIndexes[itemIndex + 1] != currentActionIndex) {
-        this.stackHistory[currentActionIndex] = [...stack];
+      // if (itemIndex + 1 >= this.intermediate.length || this.actionEndIndeces[itemIndex + 1] != currentActionIndex) {
+      //   this.stackHistory[currentActionIndex] = [...stack];
+      // }
+
+      if (typeof this.actionEndIndeces[itemIndex] != "undefined") {
+        this.actionEndIndeces[itemIndex].forEach((action) => {
+          let topOfStack = actionStack.pop();
+
+          if (topOfStack != action) {
+            throw new Error("Error processing stack; unexpected action ending.");
+          }
+
+          this.stackHistory[action.id] = [...stack];
+        })
       }
       
       return item;
@@ -288,11 +325,14 @@ export class ActionProcessor {
   }
 
   processJumpDestinations() {
-    Object.keys(this.actionInstructionStartIndex).forEach((idAsString:string) => {
-      let id = parseInt(idAsString);
-      let firstInstructionIndex = this.actionInstructionStartIndex[id];
-      // Don't include the current byte length as that'll point to the following byte! 
-      this.jumpDestinations[id] = BigInt(this.totalBytesAtInstruction[firstInstructionIndex] - this.bytesPerInstruction[firstInstructionIndex])
+    Object.keys(this.actionStartIndeces).forEach((firstInstructionIndexAsString:string) => {
+      let actions = this.actionStartIndeces[firstInstructionIndexAsString];
+      let firstInstructionIndex = parseInt(firstInstructionIndexAsString);
+
+      actions.forEach((action) => {
+        // Don't include the current byte length as that'll point to the following byte! 
+        this.jumpDestinations[action.id] = BigInt(this.totalBytesAtInstruction[firstInstructionIndex] - this.bytesPerInstruction[firstInstructionIndex])
+      })
     });
   }
 

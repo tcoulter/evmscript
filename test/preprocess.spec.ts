@@ -435,7 +435,7 @@ describe('Action Functions', function() {
       }).not.toThrowError();
     })
 
-    it("should allow stack references within methods, and correctly handle child actions", () => {
+    it("should allow using stack references within methods, and correctly handle child actions", () => {
       let code = `
         someLabel = 
           [$val] = push(1)
@@ -450,6 +450,22 @@ describe('Action Functions', function() {
 
       expect(bytecode).toBe(
         "0x5B600160018101905061000056"
+      )
+    })
+
+    it("should allow defining (and using) stack references within methods", () => {
+      let code = `
+        method(() => {
+          [$val] = push(1)
+          dup($val)
+          ret()
+        })
+      `
+
+      let bytecode = preprocess(code);
+
+      expect(bytecode).toBe(
+        "0x600180F3"
       )
     })
   })

@@ -161,8 +161,8 @@ describe('Grammar', () => {
       actionProcessor.processActions();
       actionProcessor.processStack();
 
-      let beforeSwap = actionProcessor.stackHistory[1];
-      let afterSwap = actionProcessor.stackHistory[2];
+      let beforeSwap = actionProcessor.stackHistory[secondPushAction.id];
+      let afterSwap = actionProcessor.stackHistory[swapAction.id];
 
       let [expectedRef2, expectedRef1] = beforeSwap;
       let [actualRef1, actualRef2] = afterSwap;
