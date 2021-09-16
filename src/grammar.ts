@@ -408,6 +408,10 @@ export class Action extends Hexable {
   push(...items:IntermediateRepresentation[]) {
     items.forEach((item) => {
       if (item instanceof Action) {
+        if (item.parentAction != null) {
+          throw new Error("FATAL ERROR: " + item.toString() + " is already the child of another action!");
+        }  
+
         if (!this.isElligableParentOf(item)) {
           throw new Error("Attempting to pass previously executed action to " + this.name + "(). This may be an error with your code; or it may be an issue with evmscript. Please evaluate your code to determine if any preprocessing variables -- like loop labels -- are being passed inappropriately to " + this.name + "(). When in doubt, use $ptr('label') to jump.")
         }
@@ -459,7 +463,7 @@ export class Action extends Hexable {
   }
 
   toString() {
-    return "Action(" + this.name + "):" + this.id;
+    return "Action[name=" + this.name + ", id=" + this.id + "]";
   }
 
   originalLineAndColumn() {

@@ -531,9 +531,14 @@ function method(context:RuntimeContext, fn:() => void) {
   // Run the function, which will push things onto the main actions list
   fn();
 
-  // Cut out the newly added stuff and make it a child
-  // of the method action. 
-  action.push(...context.actions.splice(startingIndex))
+  // Cut out the newly added actions so we can make them a child
+  // of the method's action. 
+  let newlyAddedActions = context.actions.splice(startingIndex);
+
+  // Only add actions that aren't themselves a child of any action. 
+  action.push(
+    ...newlyAddedActions.filter((item) => item.parentAction == null)
+  )
 
   // Get the last instruction, no matter how deep we have to go
   let lastInstruction:IntermediateRepresentation = action;

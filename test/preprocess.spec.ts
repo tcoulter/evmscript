@@ -435,14 +435,13 @@ describe('Action Functions', function() {
       }).not.toThrowError();
     })
 
-    it("should allow stack references within methods", () => {
+    it("should allow stack references within methods, and correctly handle child actions", () => {
       let code = `
         someLabel = 
           [$val] = push(1)
 
         method(() => {
-          add($val, 1)
-          pop() // for stack neutrality
+          set($val, add($val, 1))
           jump(someLabel) // for jump constraint
         })
       `
@@ -450,7 +449,7 @@ describe('Action Functions', function() {
       let bytecode = preprocess(code);
 
       expect(bytecode).toBe(
-        "0x5B6001600181015061000056"
+        "0x5B600160018101905061000056"
       )
     })
   })
