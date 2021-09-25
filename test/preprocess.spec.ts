@@ -39,6 +39,25 @@ describe('General Processing', () => {
       "0x6005"
     )
   })
+
+  it("allows macro functions", () => {
+    let code = `
+      __myMacro = (val) => {
+        push(val)
+      }
+
+      __myMacro(1)
+      __myMacro(2)
+      __myMacro(3)
+      __myMacro(4)
+    `
+
+    let bytecode = preprocess(code);
+
+    expect(bytecode).toBe(
+      "0x6001600260036004"
+    )
+  })
 })
 
 describe('Action Functions', function() {
@@ -467,6 +486,46 @@ describe('Action Functions', function() {
       expect(bytecode).toBe(
         "0x600180F3"
       )
+    })
+
+    it("allows macro functions within methods", () => {
+      let code = `
+        __myMacro = (val) => {
+          push(val)
+        }
+  
+        someLabel = method(() => {
+          __myMacro(1)
+          push(2)
+          ret()
+        })
+      `
+  
+      let bytecode = preprocess(code);
+  
+      expect(bytecode).toBe(
+        "0x5B60016002F3"
+      )
+    })
+
+    it("doesn't break composability error checking due to Action.forcePush()", () => {
+      let code = `
+        __myMacro = (val) => {
+          // assert doesn't accept action pointers created beforehand
+          let a = push(1);
+          assert(a);
+        }
+
+        someLabel = method(() => {
+          __myMacro(1)
+          pop() // to stay stack neutral
+          jump($ptr("someLabel"))
+        })
+      `
+
+      expect(() => {
+        preprocess(code)
+      }).toThrowError("Attempting to pass previously executed action to assert()")
     })
   })
 });

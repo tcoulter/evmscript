@@ -421,6 +421,23 @@ export class Action extends Hexable {
     this.intermediate.push(...items);
   }
 
+  // Somewhat of a hack. The isElligibleParentOf() function
+  // is meant to catch ellibility for when actions are composed.
+  // However, there are a few exceptions where this doesn't work
+  // (e.g., method()'s that call previously defined macros).
+  // forcePush works around it by skipping those checks. 
+  // Use with caution. 
+  //
+  // TODO: Are we losing important error checking here? 
+  forcePush(...items:IntermediateRepresentation[]) {
+    items.forEach((item) => {
+      if (item instanceof Action) {
+        item.parentAction = this;
+      }
+    })
+    this.intermediate.push(...items);
+  }
+
   isElligableParentOf(other:Action) {
     let [thisLine, thisColumn] = this.originalLineAndColumn();
     let [otherLine, otherColumn] = other.originalLineAndColumn();

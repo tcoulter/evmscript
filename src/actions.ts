@@ -536,7 +536,7 @@ function method(context:RuntimeContext, fn:() => void) {
   let newlyAddedActions = context.actions.splice(startingIndex);
 
   // Only add actions that aren't themselves a child of any action. 
-  action.push(
+  action.forcePush(
     ...newlyAddedActions.filter((item) => item.parentAction == null)
   )
 
