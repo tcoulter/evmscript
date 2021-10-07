@@ -715,15 +715,17 @@ export class PrunedError extends Error {
   pruneStack() {
     let stackLines = this.stack.split(/\r?\n/);
     let found = false;
-
+ 
     this.stack = stackLines.filter((line) => {
       // Note: The [evmscript] suffix is added by the vm during processing.
       // Errors created outside of a script execution won't include it. 
-      if (!found && line.indexOf("[evmscript]") >= 0) {
+      let hasFlag = line.indexOf("[evmscript]") >= 0;
+      if (!found && hasFlag) {
         found = true;
         return true;
       }
-      return !found;
+
+      return !found || hasFlag;
     }).join(os.EOL)
   }
 
@@ -732,14 +734,26 @@ export class PrunedError extends Error {
     // 
     //   at bytecode [evmscript]:4:11
     //
-    // 1) split lines, then 2) get the last line (e.g., reverse and get the first),
-    // then 3) split the last line based on colons, 4) parseInt() and remove non-numbers
+    // 1) split lines, then 2) get the first line that matches [evmscript]
+    // then 3) split that line based on colons, 4) parseInt() and remove non-numbers
 
-    let [line, column] = this.stack.split(/\r?\n/).reverse()[0].split(":")
+    let lines = this.stack.split(/\r?\n/);
+    let line = lines[0];
+    let lineIndex = 0;
+
+    do {
+      if (line.indexOf("[evmscript]") >= 0) {
+        break;
+      }
+      lineIndex += 1;
+      line = lines[lineIndex];
+    } while (lineIndex < lines.length - 1)
+
+    let [lineNumber, columnNumber] = line.split(":")
       .map<number>((str) => parseInt(str))
       .filter((num) => !isNaN(num))
 
-    return [line, column];
+    return [lineNumber, columnNumber];
   }
 
   static from(error:Error) {

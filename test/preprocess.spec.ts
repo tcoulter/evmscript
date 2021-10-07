@@ -512,13 +512,12 @@ describe('Action Functions', function() {
       let code = `
         __myMacro = (val) => {
           // assert doesn't accept action pointers created beforehand
-          let a = push(1);
+          let a = push(val);
           assert(a);
         }
 
         someLabel = method(() => {
           __myMacro(1)
-          pop() // to stay stack neutral
           jump($ptr("someLabel"))
         })
       `

@@ -382,7 +382,7 @@ function assert(actionPointer:ActionPointer, revertString?:HexableValue) {
   let skipRevertPtr = skipRevert.getPointer();
 
   action.push(
-    action.isElligableParentOf(actionPointer.action) ? actionPointer.action : actionPointer.action,
+    actionPointer.action,
     Instruction.PUSH2,
     skipRevertPtr,
     Instruction.JUMPI,

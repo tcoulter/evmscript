@@ -97,8 +97,9 @@ describe('Grammar', () => {
       // should get pruned once caught by the preprocessor.
       //
       // Note that whitespace and tabbing matter to this test
+      let errorMessage = "This is an error.";
       let code = `
-        throw new Error("This is an error.");
+        throw new Error("${errorMessage}");
       `
 
       try {
@@ -108,6 +109,7 @@ describe('Grammar', () => {
         let error:PrunedError = e;
         let [line, column] = error.originalLineAndColumn();
 
+        expect(e.message).toContain(errorMessage);
         expect(line).toBe(2);
         expect(column).toBeUndefined(); // For some reason no column is reported on throw
       }
@@ -122,7 +124,7 @@ describe('Grammar', () => {
         // It'll put the data in the bytecode! :joy:
         let [line, column] = prunedError.originalLineAndColumn();
 
-        // console.log(">>>", line, column);
+        // console.log(">>>", line, column, actionPointer.action.prunedError.originalLineAndColumn());
 
         push(line)
         push(column)
