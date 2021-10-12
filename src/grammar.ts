@@ -442,6 +442,10 @@ export class Action extends Hexable {
     let [thisLine, thisColumn] = this.originalLineAndColumn();
     let [otherLine, otherColumn] = other.originalLineAndColumn();
     
+    if (typeof otherLine == "undefined" && typeof otherColumn == "undefined") {
+      return true;
+    }
+
     if (thisLine < otherLine) {
       return true;
     } else if (thisLine > otherLine) {
@@ -484,7 +488,7 @@ export class Action extends Hexable {
   }
 
   originalLineAndColumn() {
-    return this.prunedError.originalLineAndColumn();
+    return this.prunedError.originalEvmscriptLineAndColumn();
   }
 }
 
@@ -671,7 +675,7 @@ export class SolidityString extends Hexable {
       new Padded(this.length, 32),
       new Padded(this.str, 32, "right")
     )
-    
+ 
     return value.toHex(executedCodeContext, codeLocations);
   }
 
@@ -729,7 +733,7 @@ export class PrunedError extends Error {
     }).join(os.EOL)
   }
 
-  originalLineAndColumn():[number, number] {
+  originalEvmscriptLineAndColumn():[number|undefined, number|undefined] {
     // Example line: 
     // 
     //   at bytecode [evmscript]:4:11
@@ -739,17 +743,24 @@ export class PrunedError extends Error {
 
     let lines = this.stack.split(/\r?\n/);
     let line = lines[0];
+    let foundLine:string|null = null;
     let lineIndex = 0;
 
     do {
       if (line.indexOf("[evmscript]") >= 0) {
+        foundLine = line;
         break;
       }
       lineIndex += 1;
       line = lines[lineIndex];
-    } while (lineIndex < lines.length - 1)
+    } while (lineIndex < lines.length)
 
-    let [lineNumber, columnNumber] = line.split(":")
+    // If we didn't find [evmscript] tag, don't return any line numbers 
+    if (!foundLine) {
+      return [undefined, undefined];
+    }
+
+    let [lineNumber, columnNumber] = foundLine.split(":")
       .map<number>((str) => parseInt(str))
       .filter((num) => !isNaN(num))
 

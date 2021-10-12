@@ -107,7 +107,7 @@ describe('Grammar', () => {
       } catch (e) {
         expect(e).toBeInstanceOf(PrunedError);
         let error:PrunedError = e;
-        let [line, column] = error.originalLineAndColumn();
+        let [line, column] = error.originalEvmscriptLineAndColumn();
 
         expect(e.message).toContain(errorMessage);
         expect(line).toBe(2);
@@ -122,9 +122,10 @@ describe('Grammar', () => {
 
         // This is an extremly hacky way of getting data out
         // It'll put the data in the bytecode! :joy:
-        let [line, column] = prunedError.originalLineAndColumn();
+        let [line, column] = prunedError.originalEvmscriptLineAndColumn();
 
-        // console.log(">>>", line, column, actionPointer.action.prunedError.originalLineAndColumn());
+        // console.log(">>>", prunedError.stack);
+        // console.log(">>>", line, column, actionPointer.action.prunedError.originalEvmscriptLineAndColumn());
 
         push(line)
         push(column)
@@ -137,6 +138,15 @@ describe('Grammar', () => {
       expect(tail).toBe(
         "6002601D" // Two pushes, the first 
       )
+    })
+
+    it("returns undefined values for errors created outside of a script", () => {
+      let error = new PrunedError();
+
+      let [line, column] = error.originalEvmscriptLineAndColumn();
+
+      expect(line).toBeUndefined();
+      expect(column).toBeUndefined();
     })
   })
 

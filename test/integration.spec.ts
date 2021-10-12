@@ -171,6 +171,7 @@ describe("Integration", () => {
     `
 
     let bytecode = preprocess(code);
+
     let error:Error;
 
     try {
